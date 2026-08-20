@@ -1,0 +1,46 @@
+name: Remote shell
+description: Run a bash script on the deployment VM over SSH (password auth).
+
+# Every remote step in the pipeline goes through here, so the action version, the
+# fail-fast flags and the connection wiring are defined once. Callers pass the
+# connection from the job's `env:`, which is the single place `secrets.*` is read.
+
+inputs:
+  host:
+    description: SSH host
+    required: true
+  port:
+    description: SSH port
+    required: false
+    default: '22'
+  username:
+    description: SSH user
+    required: true
+  password:
+    description: SSH password
+    required: true
+  script:
+    description: Bash to run on the VM
+    required: true
+  envs:
+    description: Comma-separated names of environment variables to forward
+    required: false
+    default: ''
+  timeout:
+    description: Command timeout
+    required: false
+    default: 20m
+
+runs:
+  using: composite
+  steps:
+    - uses: appleboy/ssh-action@v1.2.0
+      with:
+        host: ${{ inputs.host }}
+        port: ${{ inputs.port }}
+        username: ${{ inputs.username }}
+        password: ${{ inputs.password }}
+        command_timeout: ${{ inputs.timeout }}
+        script_stop: true
+        envs: ${{ inputs.envs }}
+        script: ${{ inputs.script }}
