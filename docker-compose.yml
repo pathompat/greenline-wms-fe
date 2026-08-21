@@ -19,7 +19,7 @@ name: ${COMPOSE_PROJECT_NAME:-greenline-wms-fe}
 
 services:
   web:
-    image: ${WEB_IMAGE:-greenline-wms-web}:${WEB_IMAGE_TAG:-latest}
+    image: ${WEB_IMAGE:-greenline-wms-fe}:${WEB_IMAGE_TAG:-latest}
     build:
       context: .
       dockerfile: Dockerfile
@@ -34,7 +34,7 @@ services:
     # deploy/.env), and the name the deploy job health-checks. Container names are
     # resolvable by Docker's embedded DNS across the shared network; a compose
     # service alias would only be visible inside this project.
-    container_name: ${WEB_CONTAINER:-greenline-wms-web}
+    container_name: ${WEB_CONTAINER:-greenline-wms-fe}
     restart: unless-stopped
     init: true
     # nginx inside the image listens on 80. That is what the edge proxies to, and

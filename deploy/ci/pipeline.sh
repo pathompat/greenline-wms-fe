@@ -16,8 +16,8 @@
 #   prune  <tag>         drop all but the newest KEEP_IMAGES images
 #
 # Environment (exported by the workflow):
-#   WEB_IMAGE       image name          (default greenline-wms-web)
-#   WEB_CONTAINER   container name      (default greenline-wms-web)
+#   WEB_IMAGE       image name          (default greenline-wms-fe)
+#   WEB_CONTAINER   container name      (default greenline-wms-fe)
 #   NETWORK_NAME    shared docker network joining this stack to the backend's
 #   VITE_API_URL    API origin baked into the bundle at build time
 #   HEALTH_TIMEOUT, KEEP_IMAGES
@@ -26,11 +26,11 @@ set -Eeuo pipefail
 
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
-WEB_IMAGE="${WEB_IMAGE:-greenline-wms-web}"
-WEB_CONTAINER="${WEB_CONTAINER:-greenline-wms-web}"
+WEB_IMAGE="${WEB_IMAGE:-greenline-wms-fe}"
+WEB_CONTAINER="${WEB_CONTAINER:-greenline-wms-fe}"
 HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-90}"
 KEEP_IMAGES="${KEEP_IMAGES:-5}"
-SMOKE_CONTAINER="greenline-wms-web-smoke"
+SMOKE_CONTAINER="greenline-wms-fe-smoke"
 # Shared with the backend's compose project. Declared `external` in both compose
 # files, so neither `docker compose down` removes it.
 NETWORK_NAME="${NETWORK_NAME:-greenline-net}"
@@ -173,8 +173,13 @@ cmd_deploy() {
 
   # --no-build because the image was built and tested above and compose must not
   # silently rebuild it (the service carries a build: section for local use).
+  #
+  # --remove-orphans clears containers this project owns that the compose file no
+  # longer describes. It earns its place at a rename: the container was
+  # greenline-wms-web until this commit, and a leftover under the old name would
+  # still be holding the published port, so the new one could not start.
   echo "==> Deploying $WEB_IMAGE:$tag"
-  compose "$tag" up -d --no-build web
+  compose "$tag" up -d --no-build --remove-orphans web
 
   echo "==> Waiting up to ${HEALTH_TIMEOUT}s for $WEB_CONTAINER to become healthy"
   if wait_for_health; then

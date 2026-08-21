@@ -35,10 +35,10 @@ concurrency:
 env:
   # This repo's checkout on the VM. It owns ./docker-compose.yml.
   APP_DIR: /opt/app/greenline-wms-fe
-  WEB_IMAGE: greenline-wms-web
+  WEB_IMAGE: greenline-wms-fe
   # Also the hostname the backend's edge nginx proxies to (its WEB_UPSTREAM),
   # since container names are what Docker's DNS resolves across a shared network.
-  WEB_CONTAINER: greenline-wms-web
+  WEB_CONTAINER: greenline-wms-fe
   # Shared with the backend's compose project, which declares the same network
   # `external` and joins it from its own repository. The pipeline creates it if
   # it does not exist, so neither stack has to be deployed before the other.

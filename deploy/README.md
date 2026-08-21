@@ -16,11 +16,11 @@ without disturbing the other.
           ═══ docker network: greenline-net (external to both) ═══
                                       │
                     ┌─ compose project: greenline-wms-fe (this repo) ─┐
-                    │  greenline-wms-web :80 — nginx serving dist/    │
+                    │  greenline-wms-fe :80 — nginx serving dist/    │
                     └────────────────────────────────────────────────┘
 ```
 
-The edge finds this container by its **name** (`greenline-wms-web`), which is what
+The edge finds this container by its **name** (`greenline-wms-fe`), which is what
 Docker's embedded DNS resolves across a shared network — a compose service alias
 would only be visible inside this project. That is why the container name is
 pinned in `docker-compose.yml` and in the backend's `WEB_UPSTREAM`.
@@ -41,7 +41,7 @@ over SSH on the same AlmaLinux 9 VM as the backend:
 
 | Job | What it does |
 |---|---|
-| **build** | syncs this checkout on the VM, `docker build` → `greenline-wms-web:<sha>` (+ `:latest`) |
+| **build** | syncs this checkout on the VM, `docker build` → `greenline-wms-fe:<sha>` (+ `:latest`) |
 | **test** | starts that image with no network and checks it serves the app shell, has built assets, and has the expected API origin baked in |
 | **deploy** | `docker compose up -d --no-build web` on this repo's own compose file, waits for the healthcheck, rolls back to the previous tag on failure, prunes old images |
 
@@ -129,7 +129,7 @@ re-running **this** workflow — a backend deploy cannot rebuild this bundle.
 | Deploy a specific ref | Run workflow → `ref` = branch, tag or full SHA |
 | Change the API origin | edit the `VITE_API_URL` variable, then re-run the workflow (a rebuild is required) |
 | Roll back | Run workflow with `ref` set to the previous commit, or on the VM: `deploy/ci/pipeline.sh deploy <older-sha12>` |
-| Logs | `docker logs -f greenline-wms-web` |
+| Logs | `docker logs -f greenline-wms-fe` |
 | Serve without the edge | `WEB_BIND=0.0.0.0 docker compose up -d` |
 | Stop just this stack | `docker compose down` — leaves `greenline-net` and the backend alone |
 
@@ -146,6 +146,6 @@ it.
 | `network greenline-net declared as external, but could not be found` | `docker network create greenline-net`; the pipeline does this itself, so only a hand-run `docker compose up` hits it |
 | `VITE_API_URL … was not baked into the bundle` | the variable changed after the image was built, or the build silently used a different value — re-run the build job |
 | App loads but every request fails / CORS or mixed-content errors in the console | `VITE_API_URL` points somewhere the browser cannot reach (localhost, `http://` from an https page, or a trailing `/api`) |
-| The edge answers 502 on `/` but this container is healthy | it is not on the shared network: `docker network inspect greenline-net` should list `greenline-wms-web`. A `docker compose down` here disconnects it until the next `up` |
-| The edge answers 502 on `/` and the container is gone | `docker logs greenline-wms-web`, then `docker compose up -d` |
+| The edge answers 502 on `/` but this container is healthy | it is not on the shared network: `docker network inspect greenline-net` should list `greenline-wms-fe`. A `docker compose down` here disconnects it until the next `up` |
+| The edge answers 502 on `/` and the container is gone | `docker logs greenline-wms-fe`, then `docker compose up -d` |
 | Site loads over HTTP but not HTTPS | TLS lives in the backend stack — see `greenline-wms-be/deploy/README.md` → *TLS certificates* |
