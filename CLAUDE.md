@@ -43,7 +43,7 @@ the image built in the first job is the one tested and deployed. Operator guide:
 `deploy/README.md`.
 
 - **This repo has its own compose project** (`./docker-compose.yml`, service
-  `web`, container `greenline-wms-web`). It used to be a service of the backend's
+  `web`, container `greenline-wms-fe`). It used to be a service of the backend's
   compose file, driven through a `STACK_DIR` path — it no longer is. The two
   stacks meet only on the shared docker network `greenline-net`, declared
   `external: true` in both files so neither `docker compose down` removes it and
@@ -53,7 +53,7 @@ the image built in the first job is the one tested and deployed. Operator guide:
 - **The edge addresses this container by name, not by compose alias.** A compose
   service alias is only resolvable inside its own project; a container name is
   resolvable across a shared network. `WEB_CONTAINER` here and `WEB_UPSTREAM`
-  (`greenline-wms-web:80`) in the backend's `deploy/.env` must agree.
+  (`greenline-wms-fe:80`) in the backend's `deploy/.env` must agree.
 - **`docker compose up -d --build` works standalone**, serving the built bundle on
   `127.0.0.1:8080` (`WEB_BIND=0.0.0.0` to publish it). `deploy/.env` is optional —
   every key in the compose file has a default.
