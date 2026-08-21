@@ -209,7 +209,7 @@ export function buildMixReportHtml(report) {
   .footer { margin-top: 22px; break-inside: avoid; page-break-inside: avoid; }
   .f-row { display: flex; align-items: baseline; gap: 8px 22px; flex-wrap: wrap; margin-bottom: 14px; }
   .sign-row { display: flex; gap: 60px; margin-bottom: 14px; }
-  .ink-box { display: inline-block; width: 90px; height: 46px; border: 1px solid #374151; vertical-align: middle; }
+  .ink-box { display: inline-block; width: 4cm; height: 2cm; border: 1px solid #374151; vertical-align: middle; }
   .doc-code { text-align: right; margin-top: 26px; font-weight: 700; letter-spacing: .5px; }
 
   @media print {
