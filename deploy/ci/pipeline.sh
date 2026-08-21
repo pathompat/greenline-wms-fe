@@ -18,7 +18,7 @@
 # Environment (exported by the workflow):
 #   WEB_IMAGE       image name          (default greenline-wms-web)
 #   WEB_CONTAINER   container name      (default greenline-wms-web)
-#   STACK_DIR       backend checkout that owns docker-compose.yml and deploy/.env
+#   NETWORK_NAME    shared docker network joining this stack to the backend's
 #   VITE_API_URL    API origin baked into the bundle at build time
 #   HEALTH_TIMEOUT, KEEP_IMAGES
 
@@ -28,31 +28,45 @@ cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 WEB_IMAGE="${WEB_IMAGE:-greenline-wms-web}"
 WEB_CONTAINER="${WEB_CONTAINER:-greenline-wms-web}"
-STACK_DIR="${STACK_DIR:-/opt/app/greenline-wms-be}"
 HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-90}"
 KEEP_IMAGES="${KEEP_IMAGES:-5}"
 SMOKE_CONTAINER="greenline-wms-web-smoke"
+# Shared with the backend's compose project. Declared `external` in both compose
+# files, so neither `docker compose down` removes it.
+NETWORK_NAME="${NETWORK_NAME:-greenline-net}"
 
 die() { echo "$*" >&2; exit 1; }
 
-# The stack (edge nginx + api + web) is defined in the backend repo, so `web` is
-# deployed by driving that compose file. WEB_IMAGE_TAG is passed in the
-# environment, which compose ranks above every --env-file — the same mechanism
-# the backend pipeline uses for its own tag.
+# This repo owns its own compose project now; the backend owns the api and the
+# edge. They meet only on the shared network, so deploying either one leaves the
+# other running. WEB_IMAGE/WEB_IMAGE_TAG/the container name are passed in the
+# environment, which compose ranks above every --env-file — the same mechanism the
+# backend pipeline uses for its own tag, and what makes the workflow's `env:`
+# block the single source of truth for naming.
+#
+# deploy/.env is optional here: every key in docker-compose.yml has a default, so
+# a host with no file at all still deploys correctly.
 compose() {
   local tag="$1"; shift
-  [ -f "$STACK_DIR/docker-compose.yml" ] \
-    || die "no docker-compose.yml in $STACK_DIR — is the backend repo checked out there?"
-  [ -f "$STACK_DIR/deploy/.env" ] \
-    || die "no deploy/.env in $STACK_DIR — deploy the backend once first"
   local extra=()
-  [ -f "$STACK_DIR/deploy/.env.ci" ] && extra+=(--env-file "$STACK_DIR/deploy/.env.ci")
-  [ -f "$STACK_DIR/deploy/.env.image" ] && extra+=(--env-file "$STACK_DIR/deploy/.env.image")
-  WEB_IMAGE="$WEB_IMAGE" WEB_IMAGE_TAG="$tag" \
-    docker compose -f "$STACK_DIR/docker-compose.yml" \
-      --env-file "$STACK_DIR/deploy/.env" \
-      "${extra[@]}" \
-      "$@"
+  if [ -f deploy/.env ]; then
+    extra+=(--env-file deploy/.env)
+  fi
+  WEB_IMAGE="$WEB_IMAGE" WEB_IMAGE_TAG="$tag" WEB_CONTAINER="$WEB_CONTAINER" \
+  NETWORK_NAME="$NETWORK_NAME" \
+    docker compose -f docker-compose.yml "${extra[@]}" "$@"
+}
+
+# The network is `external: true` in both compose files, which means compose
+# attaches to it but never creates it — so somebody has to, and doing it here
+# means this stack no longer depends on the backend having been deployed first.
+# Creating a network that already exists is an error, hence the inspect.
+ensure_network() {
+  if docker network inspect "$NETWORK_NAME" >/dev/null 2>&1; then
+    return 0
+  fi
+  echo "==> Creating shared docker network $NETWORK_NAME"
+  docker network create --driver bridge "$NETWORK_NAME" >/dev/null
 }
 
 container_state() {
@@ -155,10 +169,12 @@ cmd_deploy() {
   fi
   echo "==> Previously deployed tag: ${previous:-(none)}"
 
-  # --no-deps so the api and edge nginx are left alone; --no-build because the
-  # image was built and tested above and compose must not silently rebuild it.
+  ensure_network
+
+  # --no-build because the image was built and tested above and compose must not
+  # silently rebuild it (the service carries a build: section for local use).
   echo "==> Deploying $WEB_IMAGE:$tag"
-  compose "$tag" up -d --no-deps --no-build web
+  compose "$tag" up -d --no-build web
 
   echo "==> Waiting up to ${HEALTH_TIMEOUT}s for $WEB_CONTAINER to become healthy"
   if wait_for_health; then
@@ -171,7 +187,7 @@ cmd_deploy() {
 
   if [ -n "$previous" ] && docker image inspect "$WEB_IMAGE:$previous" >/dev/null 2>&1; then
     echo "==> Rolling back to $WEB_IMAGE:$previous"
-    compose "$previous" up -d --no-deps --no-build web
+    compose "$previous" up -d --no-build web
     if wait_for_health; then
       echo "==> Rolled back to $previous — the site is still up"
     else
