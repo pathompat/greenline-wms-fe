@@ -2,8 +2,10 @@ name: CI/CD
 
 # build → test → deploy: three jobs, so the run graph shows the stages as
 # separate nodes. All of them execute over SSH on the same AlmaLinux 9 VM that
-# runs the backend, because this app is the `web` service of the stack defined in
-# the backend repo's docker-compose.yml. Nothing is pushed to a registry.
+# runs the backend. This repo has its own compose project; it meets the backend's
+# only on a shared docker network, so this pipeline never touches the api or the
+# edge and the backend's never touches this container. Nothing is pushed to a
+# registry.
 #
 # The steps only invoke deploy/ci/pipeline.sh on the VM: appleboy/ssh-action
 # rewrites multi-line scripts in transit, so the shell lives in a committed file
@@ -31,12 +33,16 @@ concurrency:
 
 # ---- Deployment topology. Change a value here, not in the steps. ----
 env:
-  # This repo's checkout on the VM.
+  # This repo's checkout on the VM. It owns ./docker-compose.yml.
   APP_DIR: /opt/app/greenline-wms-fe
-  # The backend checkout, which owns docker-compose.yml and deploy/.env.
-  STACK_DIR: /opt/app/greenline-wms-be
   WEB_IMAGE: greenline-wms-web
+  # Also the hostname the backend's edge nginx proxies to (its WEB_UPSTREAM),
+  # since container names are what Docker's DNS resolves across a shared network.
   WEB_CONTAINER: greenline-wms-web
+  # Shared with the backend's compose project, which declares the same network
+  # `external` and joins it from its own repository. The pipeline creates it if
+  # it does not exist, so neither stack has to be deployed before the other.
+  NETWORK_NAME: greenline-net
   HEALTH_TIMEOUT: '90'
   KEEP_IMAGES: '5'
 
@@ -183,7 +189,7 @@ jobs:
           port: ${{ env.SSH_PORT }}
           username: ${{ env.SSH_USER }}
           password: ${{ env.SSH_PASSWORD }}
-          envs: APP_DIR,STACK_DIR,WEB_IMAGE,WEB_CONTAINER,HEALTH_TIMEOUT
+          envs: APP_DIR,WEB_IMAGE,WEB_CONTAINER,NETWORK_NAME,HEALTH_TIMEOUT
           script: |
             set -Eeuo pipefail
             bash "$APP_DIR/deploy/ci/pipeline.sh" deploy '${{ needs.build.outputs.image_tag }}'
@@ -195,7 +201,7 @@ jobs:
           port: ${{ env.SSH_PORT }}
           username: ${{ env.SSH_USER }}
           password: ${{ env.SSH_PASSWORD }}
-          envs: APP_DIR,STACK_DIR,WEB_IMAGE,KEEP_IMAGES
+          envs: APP_DIR,WEB_IMAGE,KEEP_IMAGES
           script: |
             set -Eeuo pipefail
             bash "$APP_DIR/deploy/ci/pipeline.sh" prune '${{ needs.build.outputs.image_tag }}'

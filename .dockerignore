@@ -12,6 +12,11 @@ dist
 .claude
 .DS_Store
 Dockerfile
+docker-compose.yml
+deploy/ci
+deploy/README.md
+deploy/.env
+deploy/.env.*
 README.md
 CLAUDE.md
 render.yaml

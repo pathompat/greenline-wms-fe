@@ -1,0 +1,71 @@
+# Frontend stack: the built Vite bundle served by nginx.
+#
+# This is a compose project of its own, independent of the backend's. The two are
+# joined only by a shared, externally-created docker network — so this stack can
+# be built, restarted or torn down without touching the api, and vice versa.
+#
+#   standalone   docker network create greenline-net   # once per machine
+#                docker compose up -d --build
+#                → serves the built app on http://127.0.0.1:8080
+#
+#   behind the edge   the backend stack's nginx proxies everything that is not
+#                     /api/ to this container, by container name, over the shared
+#                     network. Nothing extra to do — joining the network is enough.
+#
+# The bundle is static: `npm run build` runs at image build time and the result is
+# baked in, so VITE_API_URL is a *build* argument, not a runtime one. Changing it
+# means rebuilding the image, not restarting the container.
+name: ${COMPOSE_PROJECT_NAME:-greenline-wms-fe}
+
+services:
+  web:
+    image: ${WEB_IMAGE:-greenline-wms-web}:${WEB_IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runner
+      args:
+        # The API's *origin* — the app appends /api/... itself — so no trailing
+        # slash and no /api. Because the edge serves the app and proxies /api/ on
+        # the same host, this is normally the site's own public URL, e.g.
+        # https://dev-app.greenlinepetcare.co.th.
+        VITE_API_URL: ${VITE_API_URL:-}
+    # The name the edge nginx proxies to (WEB_UPSTREAM in the backend's
+    # deploy/.env), and the name the deploy job health-checks. Container names are
+    # resolvable by Docker's embedded DNS across the shared network; a compose
+    # service alias would only be visible inside this project.
+    container_name: ${WEB_CONTAINER:-greenline-wms-web}
+    restart: unless-stopped
+    init: true
+    # nginx inside the image listens on 80. That is what the edge proxies to, and
+    # it is independent of whatever port is published on the host below.
+    expose:
+      - '80'
+    ports:
+      # Loopback-only by default: in a full deployment the edge reaches this
+      # container over the shared network and this published port is just for
+      # checking the app on the VM itself. Set WEB_BIND=0.0.0.0 to serve it
+      # directly — useful when running this stack with no backend edge in front.
+      - '${WEB_BIND:-127.0.0.1}:${WEB_HOST_PORT:-8080}:80'
+    networks:
+      greenline:
+        aliases: [web]
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '5'
+
+# Created once on the host, outside either compose project:
+#
+#   docker network create greenline-net
+#
+# Both pipelines create it if it is missing, so on the VM you never run that by
+# hand — but a fresh laptop does need it once, or compose refuses to start with
+# `network greenline-net declared as external, but could not be found`.
+# `external: true` means compose attaches to it and never deletes it — a
+# `docker compose down` here leaves the backend stack connected and serving.
+networks:
+  greenline:
+    external: true
+    name: ${NETWORK_NAME:-greenline-net}

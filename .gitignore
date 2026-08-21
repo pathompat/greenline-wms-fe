@@ -4,5 +4,11 @@ dist/
 .env.local
 .env.*.local
 !.env.example
+
+# Server-side environment for deploy/, filled in on the VM
+deploy/.env
+deploy/.env.*
+!deploy/.env.example
+
 # macOS
 .DS_Store

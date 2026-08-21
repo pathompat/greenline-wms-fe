@@ -42,16 +42,29 @@ AlmaLinux 9 VM as the backend (`APP_DIR=/opt/app/greenline-wms-fe`). No registry
 the image built in the first job is the one tested and deployed. Operator guide:
 `deploy/README.md`.
 
-- **This app is the `web` service of the backend's compose stack.** The stack
-  file, `deploy/.env` and the edge nginx all live in `greenline-wms-be`; deploying
-  here means driving that compose file (`STACK_DIR`) for the `web` service only,
-  with `--no-deps` so the API and edge are untouched. The reverse is also true —
-  a backend deploy never restarts `web`.
+- **This repo has its own compose project** (`./docker-compose.yml`, service
+  `web`, container `greenline-wms-web`). It used to be a service of the backend's
+  compose file, driven through a `STACK_DIR` path — it no longer is. The two
+  stacks meet only on the shared docker network `greenline-net`, declared
+  `external: true` in both files so neither `docker compose down` removes it and
+  neither pipeline touches the other's containers. `deploy/ci/pipeline.sh`
+  creates the network if it is missing, so this stack no longer needs the backend
+  to have been deployed first.
+- **The edge addresses this container by name, not by compose alias.** A compose
+  service alias is only resolvable inside its own project; a container name is
+  resolvable across a shared network. `WEB_CONTAINER` here and `WEB_UPSTREAM`
+  (`greenline-wms-web:80`) in the backend's `deploy/.env` must agree.
+- **`docker compose up -d --build` works standalone**, serving the built bundle on
+  `127.0.0.1:8080` (`WEB_BIND=0.0.0.0` to publish it). `deploy/.env` is optional —
+  every key in the compose file has a default.
 - **`VITE_API_URL` is baked in at build time**, so the image is specific to one
   origin. It is the API's *origin* — `src/api/axios.js` appends `/api/...` — so no
   trailing slash and no `/api`. Unset, the bundle silently falls back to
   `http://localhost:3000`; the test stage greps the built assets for the expected
-  value and fails rather than shipping that.
+  value and fails rather than shipping that. Once the edge has a certificate it
+  must be `https://` — the backend's `SSL_DOMAIN`, e.g.
+  `https://dev-app.greenlinepetcare.co.th`. Changing that domain requires
+  re-running **this** pipeline; a backend deploy cannot rebuild this bundle.
 - **The remote shell lives in `deploy/ci/pipeline.sh`, not in the workflow.**
   `appleboy/ssh-action` (drone-ssh) rewrites multi-line scripts in transit and
   breaks them mid-token; each workflow step sends one short command instead, and
