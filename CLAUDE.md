@@ -42,6 +42,31 @@ AlmaLinux 9 VM as the backend (`APP_DIR=/opt/app/greenline-wms-fe`). No registry
 the image built in the first job is the one tested and deployed. Operator guide:
 `deploy/README.md`.
 
+
+`.github/workflows/release.yml` is the **production** path: it triggers on a
+version tag (`1.0.0`, `v1.0.0` — pre-releases deliberately do not match), deploys
+to a **different VM** (`app.greenlinepetcare.co.th`, `202.129.16.144`), and reuses
+the same `deploy/ci/pipeline.sh` stages unchanged. Two things make it a release
+pipeline rather than a second CI one:
+
+- **The tag must be on `main`, and that is checked.** A tag can point at any
+  commit, so the build job resolves it and runs
+  `git merge-base --is-ancestor <tag> origin/main`, failing before the VM is
+  touched. Do not weaken this to a trigger filter — `on: push: tags:` cannot
+  express "and it is on main".
+- **Deploy is gated on a human.** Build and test use the *unprotected*
+  `production-build` environment; only `deploy` names `production`, which carries
+  required reviewers. The split exists because a protection rule applies to every
+  job that names the environment. The reviewers are a repository **setting**, not
+  something the YAML can assert: without them configured, deploy runs unattended.
+
+`VITE_API_URL` lives on `production-build`, not `production`, because Vite inlines
+it at **build** time — the job that needs it is the one that runs unattended. It
+defaults to `https://app.greenlinepetcare.co.th` in the workflow: unset is not a
+build failure, it is a bundle pointing at `http://localhost:3000` that passes every
+healthcheck and reaches no API. Production images are tagged with the version
+(`greenline-wms-fe:1.0.0`) rather than the sha, with the commit in the image's
+`org.opencontainers.image.revision` label.
 - **This repo has its own compose project** (`./docker-compose.yml`, service
   `web`, container `greenline-wms-fe`). It used to be a service of the backend's
   compose file, driven through a `STACK_DIR` path — it no longer is. The two

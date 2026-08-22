@@ -1,0 +1,269 @@
+name: Release
+
+# Production pipeline. Same three stages as ci-cd.yml (build → test → deploy) and
+# the same deploy/ci/pipeline.sh, but with three differences that matter:
+#
+#   1. It runs on a version tag (1.0.0, 1.0.1, …), never on a branch push.
+#   2. The tagged commit MUST be contained in `main`. A tag pointing anywhere
+#      else fails the run before the VM is touched at all.
+#   3. Deploy does not happen on its own. Build and test run unattended so a tag
+#      is verified immediately, then the deploy job waits on the `production`
+#      environment's required reviewers — an admin/maintainer presses the button.
+#
+# Because a protection rule applies to *every* job that names the environment,
+# the stages read from two environments:
+#
+#   production-build  unprotected. SSH_HOST / SSH_PORT / SSH_USER / SSH_PASSWORD
+#                     plus VITE_API_URL — Vite inlines the API origin at build
+#                     time, so the build stage genuinely needs it. Lets build and
+#                     test run without an approval prompt.
+#   production        protected with required reviewers. Gates the deploy job.
+#
+# Production is a different VM from develop (app.greenlinepetcare.co.th vs
+# dev-app.greenlinepetcare.co.th), so container names, ports and paths are free
+# to be identical to the develop stack's.
+
+on:
+  push:
+    tags:
+      # GitHub filter patterns, not regex: `+` means "one or more of the
+      # preceding character" and `.` is literal. Matches 1.0.0 and v1.0.0;
+      # deliberately does not match pre-releases like 1.0.0-rc.1.
+      - '[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing release tag to build and deploy (e.g. 1.0.2)'
+        required: true
+
+permissions:
+  contents: read
+
+# Per tag, so a release waiting on its approval does not block a newer tag from
+# building. Serialising the part that actually touches the host is the deploy
+# job's own concurrency group, below.
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+# ---- Deployment topology. Change a value here, not in the steps. ----
+env:
+  APP_DIR: /opt/app/greenline-wms-fe
+  WEB_IMAGE: greenline-wms-fe
+  # Also the hostname the backend's edge nginx proxies to (its WEB_UPSTREAM).
+  WEB_CONTAINER: greenline-wms-fe
+  NETWORK_NAME: greenline-net
+  HEALTH_TIMEOUT: '90'
+  KEEP_IMAGES: '5'
+  RELEASE_BRANCH: main
+
+jobs:
+  # ===========================================================================
+  # 1. BUILD — verify the tag is on main, then build the nginx image on the VM.
+  # ===========================================================================
+  build:
+    name: Verify tag and build image
+    runs-on: ubuntu-latest
+    environment: production-build
+    env:
+      SSH_HOST: ${{ secrets.SSH_HOST }}
+      SSH_PORT: ${{ secrets.SSH_PORT || 22 }}
+      SSH_USER: ${{ secrets.SSH_USER }}
+      SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
+      # Baked into the bundle at build time: the site's public origin, no
+      # trailing slash and no /api (the app appends that itself). Defaulted
+      # rather than left to the variable alone — an unset value does not fail the
+      # build, it ships a bundle pointing at http://localhost:3000, which looks
+      # perfectly healthy and cannot reach the API from anyone's browser.
+      VITE_API_URL: ${{ vars.VITE_API_URL || 'https://app.greenlinepetcare.co.th' }}
+    outputs:
+      image_tag: ${{ steps.resolve.outputs.image_tag }}
+      sha: ${{ steps.resolve.outputs.sha }}
+      version: ${{ steps.resolve.outputs.version }}
+    steps:
+      - name: Check out (for .github/actions/remote)
+        uses: actions/checkout@v4
+        with:
+          # Full history: the guard below has to prove the tag is an ancestor of
+          # main, which a shallow clone cannot answer.
+          fetch-depth: 0
+
+      - name: Resolve the release tag and check it is on main
+        id: resolve
+        env:
+          RELEASE_REF: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          git fetch --force --tags origin
+          git fetch --no-tags origin "+refs/heads/${RELEASE_BRANCH}:refs/remotes/origin/${RELEASE_BRANCH}"
+
+          # ^{commit} dereferences an annotated tag to the commit it points at;
+          # a lightweight tag is already one.
+          if ! SHA="$(git rev-parse -q --verify "refs/tags/${RELEASE_REF}^{commit}")"; then
+            echo "::error::tag '${RELEASE_REF}' does not exist in this repository"
+            exit 1
+          fi
+
+          # THE GATE. A tag can be pushed pointing at any commit in the
+          # repository, so this is what makes "production only ever runs code
+          # from main" true rather than a convention.
+          if ! git merge-base --is-ancestor "$SHA" "origin/${RELEASE_BRANCH}"; then
+            echo "::error::tag '${RELEASE_REF}' (${SHA}) is not contained in origin/${RELEASE_BRANCH} — refusing to release"
+            {
+              echo "### Release refused"
+              echo ""
+              echo "Tag \`${RELEASE_REF}\` points at \`${SHA}\`, which is not on \`${RELEASE_BRANCH}\`."
+              echo ""
+              echo "Merge the work into \`${RELEASE_BRANCH}\` first, then move the tag:"
+              echo ""
+              echo '```'
+              echo "git checkout ${RELEASE_BRANCH} && git pull"
+              echo "git tag -f ${RELEASE_REF} && git push -f origin ${RELEASE_REF}"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          {
+            echo "sha=$SHA"
+            echo "version=${RELEASE_REF}"
+            # The image is tagged with the version, not the sha, so `docker ps`
+            # on the production host reads as the release you shipped. The commit
+            # is still recoverable from the image's revision label.
+            echo "image_tag=${RELEASE_REF}"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "==> Releasing ${RELEASE_REF} (${SHA}), confirmed on ${RELEASE_BRANCH}"
+
+      - name: Sync checkout on the VM
+        uses: ./.github/actions/remote
+        with:
+          host: ${{ env.SSH_HOST }}
+          port: ${{ env.SSH_PORT }}
+          username: ${{ env.SSH_USER }}
+          password: ${{ env.SSH_PASSWORD }}
+          envs: APP_DIR
+          script: |
+            set -Eeuo pipefail
+            GIT_SHA='${{ steps.resolve.outputs.sha }}'
+            GH_TOKEN='${{ github.token }}'
+            cd "$APP_DIR"
+            test -d .git || { echo "$APP_DIR is not a git checkout — clone the repository first"; exit 1; }
+            echo "==> Syncing checkout to $GIT_SHA"
+            git -c credential.helper= -c credential.helper='!f() { echo username=x-access-token; echo "password=$GH_TOKEN"; }; f' fetch --prune --tags origin
+            git reset --hard "$GIT_SHA"
+            git clean -fd
+
+      - name: Build image
+        uses: ./.github/actions/remote
+        with:
+          host: ${{ env.SSH_HOST }}
+          port: ${{ env.SSH_PORT }}
+          username: ${{ env.SSH_USER }}
+          password: ${{ env.SSH_PASSWORD }}
+          timeout: 30m
+          envs: APP_DIR,WEB_IMAGE,VITE_API_URL
+          script: |
+            set -Eeuo pipefail
+            bash "$APP_DIR/deploy/ci/pipeline.sh" build '${{ steps.resolve.outputs.image_tag }}' '${{ steps.resolve.outputs.sha }}'
+
+  # ===========================================================================
+  # 2. TEST — the image must serve the app, with the right API origin baked in.
+  # ===========================================================================
+  test:
+    name: Smoke test the built image
+    runs-on: ubuntu-latest
+    needs: build
+    environment: production-build
+    env:
+      SSH_HOST: ${{ secrets.SSH_HOST }}
+      SSH_PORT: ${{ secrets.SSH_PORT || 22 }}
+      SSH_USER: ${{ secrets.SSH_USER }}
+      SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
+      # Must match the build job's value exactly: cmd_test greps the built assets
+      # for it and fails when the bundle does not contain the origin we asked for.
+      VITE_API_URL: ${{ vars.VITE_API_URL || 'https://app.greenlinepetcare.co.th' }}
+    steps:
+      - name: Check out (for .github/actions/remote)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Serve the image and check it
+        uses: ./.github/actions/remote
+        with:
+          host: ${{ env.SSH_HOST }}
+          port: ${{ env.SSH_PORT }}
+          username: ${{ env.SSH_USER }}
+          password: ${{ env.SSH_PASSWORD }}
+          envs: APP_DIR,WEB_IMAGE,VITE_API_URL
+          script: |
+            set -Eeuo pipefail
+            bash "$APP_DIR/deploy/ci/pipeline.sh" test '${{ needs.build.outputs.image_tag }}'
+
+  # ===========================================================================
+  # 3. DEPLOY — HELD until a reviewer on the `production` environment approves.
+  # ===========================================================================
+  deploy:
+    name: Deploy to production (manual approval)
+    runs-on: ubuntu-latest
+    needs: [build, test]
+    # Only one rollout touches the production host at a time, even when two
+    # releases are in flight.
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    environment:
+      name: production
+      url: https://app.greenlinepetcare.co.th
+    env:
+      SSH_HOST: ${{ secrets.SSH_HOST }}
+      SSH_PORT: ${{ secrets.SSH_PORT || 22 }}
+      SSH_USER: ${{ secrets.SSH_USER }}
+      SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
+    steps:
+      - name: Check out (for .github/actions/remote)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Roll out and wait for health
+        uses: ./.github/actions/remote
+        with:
+          host: ${{ env.SSH_HOST }}
+          port: ${{ env.SSH_PORT }}
+          username: ${{ env.SSH_USER }}
+          password: ${{ env.SSH_PASSWORD }}
+          envs: APP_DIR,WEB_IMAGE,WEB_CONTAINER,NETWORK_NAME,HEALTH_TIMEOUT
+          script: |
+            set -Eeuo pipefail
+            bash "$APP_DIR/deploy/ci/pipeline.sh" deploy '${{ needs.build.outputs.image_tag }}'
+
+      - name: Prune old images
+        uses: ./.github/actions/remote
+        with:
+          host: ${{ env.SSH_HOST }}
+          port: ${{ env.SSH_PORT }}
+          username: ${{ env.SSH_USER }}
+          password: ${{ env.SSH_PASSWORD }}
+          envs: APP_DIR,WEB_IMAGE,KEEP_IMAGES
+          script: |
+            set -Eeuo pipefail
+            bash "$APP_DIR/deploy/ci/pipeline.sh" prune '${{ needs.build.outputs.image_tag }}'
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Production deploy ${{ job.status }}"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Release | \`${{ needs.build.outputs.version }}\` |"
+            echo "| Image | \`${WEB_IMAGE}:${{ needs.build.outputs.image_tag }}\` |"
+            echo "| Commit | \`${{ needs.build.outputs.sha }}\` |"
+            echo "| Site | https://app.greenlinepetcare.co.th |"
+            echo "| Triggered by | @${{ github.actor }} |"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -121,6 +121,67 @@ even before the browser refused it.
 Changing the backend's `SSL_DOMAIN` therefore means changing this too, and
 re-running **this** workflow — a backend deploy cannot rebuild this bundle.
 
+## Production releases (`release.yml`)
+
+`ci-cd.yml` deploys `develop` to **dev-app.greenlinepetcare.co.th** on every push.
+`release.yml` is the production path, and differs in three ways:
+
+| | develop (`ci-cd.yml`) | production (`release.yml`) |
+|---|---|---|
+| Trigger | push to `develop` | push of a version tag — `1.0.0`, `1.0.1`, `v1.0.0` |
+| Source | whatever was pushed | the tagged commit, **verified to be on `main`** |
+| Deploy | automatic | **held for a required reviewer** |
+| Host | `202.129.16.145` | `202.129.16.144` (a separate VM) |
+| Domain | `dev-app.greenlinepetcare.co.th` | `app.greenlinepetcare.co.th` |
+| Image tag | first 12 chars of the commit sha | the version, e.g. `greenline-wms-fe:1.0.0` |
+
+Cutting a release:
+
+```bash
+git checkout main && git pull
+git tag 1.0.0 && git push origin 1.0.0
+```
+
+Build and test start immediately; the deploy job then sits in **Waiting** until an
+approver clicks *Review deployments → Approve and deploy*. `release.yml` also takes
+a `workflow_dispatch` with a tag name, for re-deploying a tag that already exists.
+
+**The `main` check is enforced, not assumed.** A tag can be pushed pointing at any
+commit in the repository, so the build job resolves the tag and runs
+`git merge-base --is-ancestor <tag> origin/main`. A tag on a feature branch fails
+the run before the VM is touched at all. Pre-release tags (`1.0.0-rc.1`) do not
+match the trigger and are ignored entirely.
+
+Tag the two repos independently. They are separate compose projects that meet only
+on the shared network, so a backend release and a frontend release are unrelated
+events — but a change that alters the API contract needs both, and the backend
+should land first.
+
+### The two environments
+
+A GitHub protection rule applies to **every** job that names the environment, so
+splitting them is what lets build and test run unattended while only the deploy
+waits:
+
+| Environment | Protection | Holds |
+|---|---|---|
+| `production-build` | none | `SSH_HOST`, `SSH_PORT`, `SSH_USER`, `SSH_PASSWORD` for the production VM, and `VITE_API_URL` |
+| `production` | **required reviewers** | the same four `SSH_*` values |
+
+Set the reviewers under **Settings → Environments → production → Required
+reviewers**, and add the admins/maintainers who may release. Without this the
+deploy job runs on its own and the release is no longer manual — it is the one
+setting that carries the whole requirement.
+
+`VITE_API_URL` belongs on `production-build`, not `production`: Vite inlines it at
+**build** time, so it is the build and test jobs that need it. It defaults to
+`https://app.greenlinepetcare.co.th` when unset, because the fallback is otherwise
+`http://localhost:3000` — an app that looks perfectly healthy and cannot reach the
+API from anybody's browser.
+
+The production VM needs the same one-time setup as above: a clone at
+`/opt/app/greenline-wms-fe` and the `greenline-net` network.
+
 ## Day-to-day
 
 | Task | How |

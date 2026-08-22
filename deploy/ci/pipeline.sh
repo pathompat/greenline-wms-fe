@@ -98,8 +98,10 @@ cmd_build() {
     echo "  WARNING — VITE_API_URL is not set."
     echo "  Vite inlines it at build time, so the bundle will fall back to"
     echo "  http://localhost:3000 and the app will not reach the API from"
-    echo "  anyone else's browser. Set it as a variable on the 'develop'"
-    echo "  environment: the site's public origin, no trailing slash, no /api."
+    echo "  anyone else's browser. Set it as a variable on this"
+    echo "  deployment's GitHub environment ('develop' for dev-app,"
+    echo "  'production-build' for app): the site's public origin, with"
+    echo "  no trailing slash and no /api."
     echo "###############################################################"
   fi
   echo "==> Building $WEB_IMAGE:$tag (VITE_API_URL=${VITE_API_URL:-<unset>})"
