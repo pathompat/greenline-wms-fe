@@ -1,14 +1,14 @@
 name: Release
 
 # Production pipeline. Same three stages as ci-cd.yml (build → test → deploy) and
-# the same deploy/ci/pipeline.sh, but with three differences that matter:
+# the same deploy/ci/pipeline.sh, but with two differences that matter:
 #
-#   1. It runs on a version tag (1.0.0, 1.0.1, …), never on a branch push.
-#   2. The tagged commit MUST be contained in `main`. A tag pointing anywhere
-#      else fails the run before the VM is touched at all.
-#   3. Deploy does not happen on its own. Build and test run unattended so a tag
-#      is verified immediately, then the deploy job waits on the `production`
-#      environment's required reviewers — an admin/maintainer presses the button.
+#   1. It runs on a push to `main` — i.e. the moment a pull request is merged.
+#      develop's pipeline watches `develop`; this one watches `main`.
+#   2. Deploy does not happen on its own. Build and test run unattended so every
+#      merge is verified immediately, then the deploy job waits on the
+#      `production` environment's required reviewers — an admin/maintainer
+#      presses the button.
 #
 # Because a protection rule applies to *every* job that names the environment,
 # the stages read from two environments:
@@ -25,26 +25,24 @@ name: Release
 
 on:
   push:
-    tags:
-      # GitHub filter patterns, not regex: `+` means "one or more of the
-      # preceding character" and `.` is literal. Matches 1.0.0 and v1.0.0;
-      # deliberately does not match pre-releases like 1.0.0-rc.1.
-      - '[0-9]+.[0-9]+.[0-9]+'
-      - 'v[0-9]+.[0-9]+.[0-9]+'
+    branches: [main]
   workflow_dispatch:
     inputs:
-      tag:
-        description: 'Existing release tag to build and deploy (e.g. 1.0.2)'
-        required: true
+      ref:
+        description: 'Commit on main to build and deploy (blank = current head of main)'
+        required: false
+        default: ''
 
 permissions:
   contents: read
 
-# Per tag, so a release waiting on its approval does not block a newer tag from
-# building. Serialising the part that actually touches the host is the deploy
-# job's own concurrency group, below.
+# Per commit, not per branch. Merges land on main faster than a reviewer
+# approves, and a branch-wide group would make a run that is still waiting for
+# its approval block the *next* merge from even building. Serialising the part
+# that actually touches the host is the deploy job's own concurrency group,
+# below — that is where the race actually is.
 concurrency:
-  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  group: release-${{ github.event.inputs.ref || github.sha }}
   cancel-in-progress: false
 
 # ---- Deployment topology. Change a value here, not in the steps. ----
@@ -56,14 +54,15 @@ env:
   NETWORK_NAME: greenline-net
   HEALTH_TIMEOUT: '90'
   KEEP_IMAGES: '5'
+  # The only branch production is ever built from.
   RELEASE_BRANCH: main
 
 jobs:
   # ===========================================================================
-  # 1. BUILD — verify the tag is on main, then build the nginx image on the VM.
+  # 1. BUILD — verify the commit is on main, then build the nginx image on the VM.
   # ===========================================================================
   build:
-    name: Verify tag and build image
+    name: Verify commit and build image
     runs-on: ubuntu-latest
     environment: production-build
     env:
@@ -80,62 +79,66 @@ jobs:
     outputs:
       image_tag: ${{ steps.resolve.outputs.image_tag }}
       sha: ${{ steps.resolve.outputs.sha }}
-      version: ${{ steps.resolve.outputs.version }}
     steps:
       - name: Check out (for .github/actions/remote)
         uses: actions/checkout@v4
         with:
-          # Full history: the guard below has to prove the tag is an ancestor of
-          # main, which a shallow clone cannot answer.
+          # Full history: the guard below has to prove the commit is an ancestor
+          # of main, which a shallow clone cannot answer.
           fetch-depth: 0
 
-      - name: Resolve the release tag and check it is on main
+      - name: Resolve the commit and check it is on main
         id: resolve
         env:
-          RELEASE_REF: ${{ github.event.inputs.tag || github.ref_name }}
+          INPUT_REF: ${{ github.event.inputs.ref }}
         run: |
           set -euo pipefail
 
-          git fetch --force --tags origin
-          git fetch --no-tags origin "+refs/heads/${RELEASE_BRANCH}:refs/remotes/origin/${RELEASE_BRANCH}"
+          # Refresh main explicitly. checkout@v4 with fetch-depth: 0 already
+          # brings it, but a re-run of an older workflow would otherwise read a
+          # stale view of the branch.
+          git fetch --no-tags --force origin "+refs/heads/${RELEASE_BRANCH}:refs/remotes/origin/${RELEASE_BRANCH}"
 
-          # ^{commit} dereferences an annotated tag to the commit it points at;
-          # a lightweight tag is already one.
-          if ! SHA="$(git rev-parse -q --verify "refs/tags/${RELEASE_REF}^{commit}")"; then
-            echo "::error::tag '${RELEASE_REF}' does not exist in this repository"
-            exit 1
+          if [ -n "$INPUT_REF" ]; then
+            # A manual run may name an older commit on main — that is the
+            # rollback path. Resolve it locally first, then as a remote ref.
+            SHA="$(git rev-parse -q --verify "${INPUT_REF}^{commit}" \
+                   || git rev-parse -q --verify "origin/${INPUT_REF}^{commit}" \
+                   || true)"
+            if [ -z "$SHA" ]; then
+              echo "::error::ref '${INPUT_REF}' does not resolve to a commit in this repository"
+              exit 1
+            fi
+          else
+            SHA="${{ github.sha }}"
           fi
 
-          # THE GATE. A tag can be pushed pointing at any commit in the
-          # repository, so this is what makes "production only ever runs code
-          # from main" true rather than a convention.
+          # THE GATE. A push to main satisfies this trivially; a manual dispatch
+          # from a feature branch, or naming a commit that was never merged, does
+          # not. This is what makes "production only ever runs code from main"
+          # true rather than a convention.
           if ! git merge-base --is-ancestor "$SHA" "origin/${RELEASE_BRANCH}"; then
-            echo "::error::tag '${RELEASE_REF}' (${SHA}) is not contained in origin/${RELEASE_BRANCH} — refusing to release"
+            echo "::error::commit ${SHA} is not contained in origin/${RELEASE_BRANCH} — refusing to release"
             {
               echo "### Release refused"
               echo ""
-              echo "Tag \`${RELEASE_REF}\` points at \`${SHA}\`, which is not on \`${RELEASE_BRANCH}\`."
+              echo "Commit \`${SHA}\` is not on \`${RELEASE_BRANCH}\`."
               echo ""
-              echo "Merge the work into \`${RELEASE_BRANCH}\` first, then move the tag:"
-              echo ""
-              echo '```'
-              echo "git checkout ${RELEASE_BRANCH} && git pull"
-              echo "git tag -f ${RELEASE_REF} && git push -f origin ${RELEASE_REF}"
-              echo '```'
+              echo "Production only ever builds code that has been merged. Open a pull"
+              echo "request into \`${RELEASE_BRANCH}\` and merge it — that alone starts this"
+              echo "pipeline."
             } >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
 
           {
             echo "sha=$SHA"
-            echo "version=${RELEASE_REF}"
-            # The image is tagged with the version, not the sha, so `docker ps`
-            # on the production host reads as the release you shipped. The commit
-            # is still recoverable from the image's revision label.
-            echo "image_tag=${RELEASE_REF}"
+            # Same scheme as develop: the first 12 chars of the commit sha, so an
+            # image on either host reads the same way and maps back to a commit.
+            echo "image_tag=${SHA:0:12}"
           } >> "$GITHUB_OUTPUT"
 
-          echo "==> Releasing ${RELEASE_REF} (${SHA}), confirmed on ${RELEASE_BRANCH}"
+          echo "==> Releasing ${SHA} as ${SHA:0:12}, confirmed on ${RELEASE_BRANCH}"
 
       - name: Sync checkout on the VM
         uses: ./.github/actions/remote
@@ -210,8 +213,8 @@ jobs:
     name: Deploy to production (manual approval)
     runs-on: ubuntu-latest
     needs: [build, test]
-    # Only one rollout touches the production host at a time, even when two
-    # releases are in flight.
+    # Only one rollout touches the production host at a time, even when several
+    # merges are waiting for their approval.
     concurrency:
       group: deploy-production
       cancel-in-progress: false
@@ -261,7 +264,6 @@ jobs:
             echo ""
             echo "| | |"
             echo "|---|---|"
-            echo "| Release | \`${{ needs.build.outputs.version }}\` |"
             echo "| Image | \`${WEB_IMAGE}:${{ needs.build.outputs.image_tag }}\` |"
             echo "| Commit | \`${{ needs.build.outputs.sha }}\` |"
             echo "| Site | https://app.greenlinepetcare.co.th |"

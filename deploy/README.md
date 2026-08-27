@@ -128,34 +128,39 @@ re-running **this** workflow — a backend deploy cannot rebuild this bundle.
 
 | | develop (`ci-cd.yml`) | production (`release.yml`) |
 |---|---|---|
-| Trigger | push to `develop` | push of a version tag — `1.0.0`, `1.0.1`, `v1.0.0` |
-| Source | whatever was pushed | the tagged commit, **verified to be on `main`** |
+| Trigger | push to `develop` | push to `main` — i.e. a merged pull request |
+| Source | whatever was pushed | the merged commit, **verified to be on `main`** |
 | Deploy | automatic | **held for a required reviewer** |
 | Host | `202.129.16.145` | `202.129.16.144` (a separate VM) |
 | Domain | `dev-app.greenlinepetcare.co.th` | `app.greenlinepetcare.co.th` |
-| Image tag | first 12 chars of the commit sha | the version, e.g. `greenline-wms-fe:1.0.0` |
+| Image tag | first 12 chars of the commit sha | the same |
 
-Cutting a release:
+Shipping a release is merging into `main`. Nothing else is required — no tag, no
+manual step to start the run:
 
 ```bash
-git checkout main && git pull
-git tag 1.0.0 && git push origin 1.0.0
+gh pr create --base main --head develop --title 'Release'   # or the web UI
+# merge it
 ```
 
-Build and test start immediately; the deploy job then sits in **Waiting** until an
-approver clicks *Review deployments → Approve and deploy*. `release.yml` also takes
-a `workflow_dispatch` with a tag name, for re-deploying a tag that already exists.
+Build and test start on the merge; the deploy job then sits in **Waiting** until
+an approver clicks *Review deployments → Approve and deploy*. Several merges can
+be waiting for approval at once — they build in parallel, but only one rollout
+touches the host at a time.
 
-**The `main` check is enforced, not assumed.** A tag can be pushed pointing at any
-commit in the repository, so the build job resolves the tag and runs
-`git merge-base --is-ancestor <tag> origin/main`. A tag on a feature branch fails
-the run before the VM is touched at all. Pre-release tags (`1.0.0-rc.1`) do not
-match the trigger and are ignored entirely.
+**Rolling back** is a `workflow_dispatch` naming the commit you want to return to:
+*Actions → Release → Run workflow*, and put an earlier `main` sha in the `ref`
+box. Leave the box blank and it builds the current head of `main`.
 
-Tag the two repos independently. They are separate compose projects that meet only
-on the shared network, so a backend release and a frontend release are unrelated
-events — but a change that alters the API contract needs both, and the backend
-should land first.
+**The `main` check is enforced, not assumed.** A push to `main` satisfies it by
+construction, but a manual dispatch can name any ref, so the build job resolves
+it and runs `git merge-base --is-ancestor <sha> origin/main`. A commit that was
+never merged fails the run before the VM is touched at all.
+
+Merge the two repos independently. They are separate compose projects that meet
+only on the shared network, so a backend release and a frontend release are
+unrelated events — but a change that alters the API contract needs both, and the
+backend should land first.
 
 ### The two environments
 
