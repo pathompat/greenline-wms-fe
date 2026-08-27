@@ -100,7 +100,7 @@ cmd_build() {
     echo "  http://localhost:3000 and the app will not reach the API from"
     echo "  anyone else's browser. Set it as a variable on this"
     echo "  deployment's GitHub environment ('develop' for dev-app,"
-    echo "  'production-build' for app): the site's public origin, with"
+    echo "  'production' for app): the site's public origin, with"
     echo "  no trailing slash and no /api."
     echo "###############################################################"
   fi

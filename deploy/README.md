@@ -162,27 +162,29 @@ only on the shared network, so a backend release and a frontend release are
 unrelated events — but a change that alters the API contract needs both, and the
 backend should land first.
 
-### The two environments
+### The `production` environment
 
-A GitHub protection rule applies to **every** job that names the environment, so
-splitting them is what lets build and test run unattended while only the deploy
-waits:
-
-| Environment | Protection | Holds |
-|---|---|---|
-| `production-build` | none | `SSH_HOST`, `SSH_PORT`, `SSH_USER`, `SSH_PASSWORD` for the production VM, and `VITE_API_URL` |
-| `production` | **required reviewers** | the same four `SSH_*` values |
+One environment holds everything: `SSH_HOST`, `SSH_PORT`, `SSH_USER`,
+`SSH_PASSWORD` for the production VM, plus `VITE_API_URL`. All three jobs name it.
 
 Set the reviewers under **Settings → Environments → production → Required
 reviewers**, and add the admins/maintainers who may release. Without this the
 deploy job runs on its own and the release is no longer manual — it is the one
 setting that carries the whole requirement.
 
-`VITE_API_URL` belongs on `production-build`, not `production`: Vite inlines it at
-**build** time, so it is the build and test jobs that need it. It defaults to
-`https://app.greenlinepetcare.co.th` when unset, because the fallback is otherwise
-`http://localhost:3000` — an app that looks perfectly healthy and cannot reach the
-API from anybody's browser.
+> **A protection rule applies to every job that names the environment.** Because
+> build and test also name `production`, they wait on the same approval: a merge
+> to `main` parks the run at *Waiting* before anything compiles, and approving
+> releases the whole pipeline rather than just the rollout. If you would rather
+> merges build and test unattended and only the rollout be held, move build and
+> test onto a second, unprotected environment — that separation is the only thing
+> that buys it.
+
+`VITE_API_URL` is read by the **build** and **test** jobs, not deploy: Vite inlines
+it at build time, so by the rollout it is already baked into the bundle. It
+defaults to `https://app.greenlinepetcare.co.th` when unset, because the fallback
+is otherwise `http://localhost:3000` — an app that looks perfectly healthy and
+cannot reach the API from anybody's browser.
 
 The production VM needs the same one-time setup as above: a clone at
 `/opt/app/greenline-wms-fe` and the `greenline-net` network.

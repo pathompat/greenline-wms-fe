@@ -55,17 +55,17 @@ rather than a second CI one:
   `git merge-base --is-ancestor <sha> origin/main`, failing before the VM is
   touched. The dispatch input exists for one reason — naming an *older* commit on
   `main` is the rollback path.
-- **Deploy is gated on a human.** Build and test use the *unprotected*
-  `production-build` environment; only `deploy` names `production`, which carries
-  required reviewers. The split exists because a protection rule applies to every
-  job that names the environment — putting them all on `production` would make a
-  merge wait for an approval before it even compiles. The reviewers are a
+- **Deploy is gated on a human.** All three jobs name the single `production`
+  environment, whose required reviewers hold the deploy. The reviewers are a
   repository **setting**, not something the YAML can assert: without them
-  configured, deploy runs unattended.
+  configured, deploy runs unattended. Note the cost of one environment — a
+  protection rule applies to *every* job that names it, so build and test wait on
+  the same approval, and a merge does not start compiling until someone clicks
+  through.
 
-`VITE_API_URL` lives on `production-build`, not `production`, because Vite inlines
-it at **build** time — the job that needs it is the one that runs unattended. It
-defaults to `https://app.greenlinepetcare.co.th` in the workflow: unset is not a
+`VITE_API_URL` lives on `production` alongside the SSH_* values, and is read by
+the **build** and **test** jobs rather than deploy: Vite inlines it at build time,
+so by the rollout it is already baked into the bundle. It defaults to `https://app.greenlinepetcare.co.th` in the workflow: unset is not a
 build failure, it is a bundle pointing at `http://localhost:3000` that passes every
 healthcheck and reaches no API. Production images are tagged with the first 12
 chars of the commit sha, the same scheme develop uses, with the full commit in the

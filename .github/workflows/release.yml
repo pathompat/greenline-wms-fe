@@ -10,14 +10,15 @@ name: Release
 #      `production` environment's required reviewers — an admin/maintainer
 #      presses the button.
 #
-# Because a protection rule applies to *every* job that names the environment,
-# the stages read from two environments:
+# All three jobs read from the single `production` environment, which holds the
+# SSH_* connection details plus VITE_API_URL — Vite inlines the API origin at
+# build time, so the build stage genuinely needs it.
 #
-#   production  unprotected. SSH_HOST / SSH_PORT / SSH_USER / SSH_PASSWORD
-#                     plus VITE_API_URL — Vite inlines the API origin at build
-#                     time, so the build stage genuinely needs it. Lets build and
-#                     test run without an approval prompt.
-#   production        protected with required reviewers. Gates the deploy job.
+# NOTE: a protection rule applies to *every* job that names the environment. With
+# required reviewers on `production`, build and test wait for an approval too — a
+# merge does not start compiling until someone clicks through. If you want merges
+# to build unattended and only the rollout to be gated, the deploy job's approval
+# has to come from an environment that build and test do not name.
 #
 # Production is a different VM from develop (app.greenlinepetcare.co.th vs
 # dev-app.greenlinepetcare.co.th), so container names, ports and paths are free
