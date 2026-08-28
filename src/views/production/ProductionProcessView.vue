@@ -195,7 +195,12 @@
                     <i :class="row.end ? 'pi pi-pencil' : 'pi pi-clock'" />
                   </div>
                 </td>
-                <td><input v-model.number="row.temp" type="number" step="0.1" class="cell-input" /></td>
+                <td>
+                  <div :class="['cell-temp-btn', { 'has-value': hasTemp(row) }]" @click.stop="toggleNumpad(`meat-temp-${idx}`, row, $event)">
+                    <template v-if="hasTemp(row)"><span>{{ row.temp }}</span><small>°C</small></template>
+                    <template v-else><span>--</span><i class="pi pi-th-large" /></template>
+                  </div>
+                </td>
                 <td class="act-col">
                   <button v-if="meat.rows.length > 1" class="row-del" title="ลบรอบนี้" @click="meat.rows.splice(idx, 1)"><i class="pi pi-trash" /></button>
                 </td>
@@ -271,7 +276,7 @@
 
   <!-- Time picker dropdown (teleported to body to escape table overflow) -->
   <Teleport to="body">
-    <div v-if="openPickerId" class="time-drop" :style="{ top: pickerPos.top + 'px', left: pickerPos.left + 'px' }" @click.stop>
+    <div v-if="openPickerId" ref="pickerEl" class="time-drop" :style="dropStyle(pickerPos)" @click.stop>
       <div class="td-label">เวลาปัจจุบัน</div>
       <div class="td-time">{{ liveTime }}</div>
       <button class="td-save-btn" @click="saveTime"><i class="pi pi-check" /> บันทึก</button>
@@ -282,6 +287,27 @@
           <button class="td-confirm-btn" @click="saveManualTime"><i class="pi pi-check" /> ยืนยัน</button>
         </div>
       </template>
+    </div>
+  </Teleport>
+
+  <!-- Temperature numpad (teleported to body to escape table overflow) -->
+  <Teleport to="body">
+    <div v-if="openNumpadId" ref="numpadEl" class="np-drop" :style="dropStyle(numpadPos)" @click.stop>
+      <div class="np-label">อุณหภูมิ (°C)</div>
+      <div class="np-display">
+        <span class="np-value">{{ numpadValue || '0' }}</span>
+        <span class="np-unit">°C</span>
+      </div>
+      <div class="np-grid">
+        <button v-for="k in ['1','2','3','4','5','6','7','8','9']" :key="k" class="np-key" @click="pressKey(k)">{{ k }}</button>
+        <button class="np-key np-key-alt" @click="pressKey('.')">.</button>
+        <button class="np-key" @click="pressKey('0')">0</button>
+        <button class="np-key np-key-alt" title="ลบ" @click="backspaceKey"><i class="pi pi-delete-left" /></button>
+      </div>
+      <div class="np-actions">
+        <button class="np-clear-btn" @click="clearNumpad">ล้าง</button>
+        <button class="np-confirm-btn" @click="confirmNumpad"><i class="pi pi-check" /> ยืนยัน</button>
+      </div>
     </div>
   </Teleport>
 </template>
@@ -297,7 +323,7 @@ import InputNumber from "primevue/inputnumber";
 import InputText from "primevue/inputtext";
 import { useConfirm } from "primevue/useconfirm";
 import { useToast } from "primevue/usetoast";
-import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
 const route = useRoute();
@@ -473,10 +499,52 @@ watch(
   () => { if (order.value?.status === "MIXING") initMix(); },
 );
 
+// ---- shared dropdown placement ----
+// Both floating panels are position:fixed so the table's overflow cannot clip
+// them — but they can still fall off the viewport. Measure the panel after it
+// renders, flip it above the anchor when there is no room below, and clamp it
+// horizontally. Kept hidden (not unmounted) for the one frame before placement
+// so it never flashes at the wrong spot.
+const VIEWPORT_MARGIN = 8;
+const GAP = 6;
+const pickerEl = ref(null);
+const numpadEl = ref(null);
+let _pickerAnchor = null;
+let _numpadAnchor = null;
+
+function dropStyle(pos) {
+  return { top: pos.top + "px", left: pos.left + "px", visibility: pos.ready ? "visible" : "hidden" };
+}
+async function placeDrop(elRef, anchor, pos) {
+  await nextTick();
+  const el = elRef.value;
+  if (!el || !anchor) return;
+  const rect = anchor.getBoundingClientRect();
+  const h = el.offsetHeight;
+  const half = el.offsetWidth / 2;
+  let top = rect.bottom + GAP;
+  if (top + h + VIEWPORT_MARGIN > window.innerHeight) {
+    const above = rect.top - h - GAP;
+    if (above >= VIEWPORT_MARGIN) top = above;
+  }
+  // Final clamp: the anchor cell itself can sit outside the viewport, so the
+  // flip alone is not enough to guarantee the panel is fully visible.
+  pos.top = Math.max(VIEWPORT_MARGIN, Math.min(top, window.innerHeight - h - VIEWPORT_MARGIN));
+  pos.left = Math.min(
+    Math.max(rect.left + rect.width / 2, half + VIEWPORT_MARGIN),
+    window.innerWidth - half - VIEWPORT_MARGIN,
+  );
+  pos.ready = true;
+}
+function repositionDrops() {
+  if (openPickerId.value) placeDrop(pickerEl, _pickerAnchor, pickerPos);
+  if (openNumpadId.value) placeDrop(numpadEl, _numpadAnchor, numpadPos);
+}
+
 // ---- time picker dropdown ----
 const openPickerId = ref(null);
 const liveTime = ref("");
-const pickerPos = reactive({ top: 0, left: 0 });
+const pickerPos = reactive({ top: 0, left: 0, ready: false });
 const pickerMode = ref("start");
 const manualEndTime = ref("");
 let liveTimer = null;
@@ -484,12 +552,14 @@ let _activeRow = null;
 let _activeKey = null;
 
 function _openPicker(id, event) {
-  const rect = event.currentTarget.getBoundingClientRect();
-  pickerPos.top = rect.bottom + 6;
-  pickerPos.left = rect.left + rect.width / 2;
+  closeNumpad();
+  _pickerAnchor = event.currentTarget;
+  pickerPos.ready = false;
   openPickerId.value = id;
   liveTime.value = nowHHMM();
+  if (liveTimer) clearInterval(liveTimer);
   liveTimer = setInterval(() => { liveTime.value = nowHHMM(); }, 1000);
+  placeDrop(pickerEl, _pickerAnchor, pickerPos);
 }
 function togglePicker(id, row, key, event) {
   if (row.starts[key]) return;
@@ -506,6 +576,7 @@ function toggleEndPicker(id, row, event) {
 function closePicker() {
   openPickerId.value = null; liveTime.value = ""; pickerMode.value = "start";
   manualEndTime.value = ""; _activeRow = null; _activeKey = null;
+  pickerPos.ready = false; _pickerAnchor = null;
   if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
 }
 function saveTime() {
@@ -520,8 +591,72 @@ function saveManualTime() {
   closePicker();
 }
 
-onMounted(() => document.addEventListener("click", closePicker));
-onUnmounted(() => { document.removeEventListener("click", closePicker); closePicker(); });
+// ---- temperature numpad ----
+const openNumpadId = ref(null);
+const numpadPos = reactive({ top: 0, left: 0, ready: false });
+const numpadValue = ref("");
+let _tempRow = null;
+
+function hasTemp(row) {
+  return row.temp !== null && row.temp !== undefined && row.temp !== "";
+}
+function toggleNumpad(id, row, event) {
+  if (openNumpadId.value === id) { closeNumpad(); return; }
+  closePicker();
+  _numpadAnchor = event.currentTarget;
+  _tempRow = row;
+  numpadValue.value = hasTemp(row) ? String(row.temp) : "";
+  numpadPos.ready = false;
+  openNumpadId.value = id;
+  placeDrop(numpadEl, _numpadAnchor, numpadPos);
+}
+function closeNumpad() {
+  openNumpadId.value = null; numpadValue.value = ""; _tempRow = null;
+  numpadPos.ready = false; _numpadAnchor = null;
+}
+function pressKey(k) {
+  if (k === "." && numpadValue.value.includes(".")) return;
+  if (k === "." && !numpadValue.value) { numpadValue.value = "0."; return; }
+  if (numpadValue.value.replace(".", "").length >= 5) return;
+  numpadValue.value += k;
+}
+function backspaceKey() {
+  numpadValue.value = numpadValue.value.slice(0, -1);
+}
+function clearNumpad() {
+  numpadValue.value = "";
+}
+function confirmNumpad() {
+  if (_tempRow) {
+    const v = numpadValue.value;
+    _tempRow.temp = v === "" || v === "." ? null : Number(v);
+  }
+  closeNumpad();
+}
+function onNumpadKeydown(e) {
+  if (!openNumpadId.value) return;
+  if (/^[0-9.]$/.test(e.key)) { e.preventDefault(); pressKey(e.key); }
+  else if (e.key === "Backspace") { e.preventDefault(); backspaceKey(); }
+  else if (e.key === "Enter") { e.preventDefault(); confirmNumpad(); }
+  else if (e.key === "Escape") { e.preventDefault(); closeNumpad(); }
+}
+
+function onDocumentClick() { closePicker(); closeNumpad(); }
+onMounted(() => {
+  document.addEventListener("click", onDocumentClick);
+  document.addEventListener("keydown", onNumpadKeydown);
+  window.addEventListener("resize", repositionDrops);
+  // capture phase so scrolling the mix table (not just the window) repositions too
+  window.addEventListener("scroll", repositionDrops, true);
+});
+onUnmounted(() => {
+  document.removeEventListener("click", onDocumentClick);
+  document.removeEventListener("keydown", onNumpadKeydown);
+  window.removeEventListener("resize", repositionDrops);
+  window.removeEventListener("scroll", repositionDrops, true);
+  closePicker();
+  closeNumpad();
+});
 
 onMounted(async () => {
   if (!masterStore.machines.length) masterStore.fetchMachines().catch(() => {});
@@ -807,14 +942,6 @@ function downloadMixReport(type) {
 .mix-sheet .end-col { width: 110px; }
 .mix-sheet .act-col { width: 52px; min-width: 52px; }
 .mix-sheet tbody .no-col { background: #f8fafc; font-weight: 700; color: #475569; border-right: 1px solid #e2e8f0; }
-.cell-input {
-  width: 100%; box-sizing: border-box; border: 1.5px solid transparent; background: transparent;
-  text-align: center; font-size: 13px; padding: 13px 8px; outline: none; color: #1e2a3b;
-  transition: background 0.12s, border-color 0.12s, box-shadow 0.12s; -moz-appearance: textfield;
-}
-.cell-input::-webkit-outer-spin-button, .cell-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-.cell-input:hover { background: #f1f5f9; }
-.cell-input:focus { background: #fff; border-color: #84cc16; box-shadow: inset 0 0 0 3px rgba(132, 204, 22, 0.13); border-radius: 8px; }
 .cell-time-btn {
   display: flex; align-items: center; justify-content: center; gap: 5px;
   width: 100%; padding: 13px 8px; cursor: pointer; font-size: 13px; color: #94a3b8; user-select: none; transition: background 0.12s;
@@ -826,6 +953,15 @@ function downloadMixReport(type) {
 .cell-time-btn.has-value { color: #166534; font-weight: 700; background: #f0fdf4; }
 .cell-time-btn.has-value:hover { background: #dcfce7; }
 .cell-time-btn.has-value .pi-pencil { font-size: 10px; opacity: 0.55; }
+.cell-temp-btn {
+  display: flex; align-items: baseline; justify-content: center; gap: 3px;
+  width: 100%; padding: 13px 8px; cursor: pointer; font-size: 13px; color: #94a3b8; user-select: none; transition: background 0.12s;
+}
+.cell-temp-btn:hover { background: #f8fafc; }
+.cell-temp-btn .pi { font-size: 10px; align-self: center; }
+.cell-temp-btn small { font-size: 10px; font-weight: 600; }
+.cell-temp-btn.has-value { color: #166534; font-weight: 700; background: #f0fdf4; }
+.cell-temp-btn.has-value:hover { background: #dcfce7; }
 .mix-sheet tbody .act-col { background: #fff; }
 .row-del {
   width: 30px; height: 30px; border: none; border-radius: 8px; cursor: pointer;
@@ -881,4 +1017,39 @@ function downloadMixReport(type) {
   display: flex; align-items: center; gap: 5px; white-space: nowrap; transition: background 0.12s; flex-shrink: 0;
 }
 .td-confirm-btn:hover { background: #475569; }
+
+/* Teleported temperature numpad */
+.np-drop {
+  position: fixed; transform: translateX(-50%); background: #fff;
+  border: 1px solid #e2e8f0; border-radius: 14px; box-shadow: 0 10px 32px rgba(0, 0, 0, 0.14);
+  padding: 16px; z-index: 9999; width: 236px; box-sizing: border-box;
+  max-height: calc(100vh - 16px); overflow-y: auto;
+}
+.np-label { font-size: 11px; color: #64748b; font-weight: 600; letter-spacing: 0.4px; text-transform: uppercase; margin-bottom: 8px; text-align: center; }
+.np-display {
+  display: flex; align-items: baseline; justify-content: flex-end; gap: 4px;
+  background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 10px; padding: 10px 14px; margin-bottom: 12px; min-height: 46px; box-sizing: border-box;
+}
+.np-value { font-size: 26px; font-weight: 800; color: #1e2a3b; font-family: 'Courier New', monospace; line-height: 1.1; }
+.np-unit { font-size: 13px; font-weight: 700; color: #94a3b8; }
+.np-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+.np-key {
+  height: 44px; border: 1.5px solid #e2e8f0; border-radius: 10px; background: #fff; cursor: pointer;
+  font-size: 17px; font-weight: 700; color: #1e2a3b; font-family: inherit;
+  display: flex; align-items: center; justify-content: center; transition: background 0.1s, border-color 0.1s, transform 0.06s;
+}
+.np-key:hover { background: #f7fee7; border-color: #84cc16; }
+.np-key:active { transform: scale(0.95); background: #ecfccb; }
+.np-key-alt { background: #f8fafc; color: #475569; font-size: 15px; }
+.np-actions { display: flex; gap: 7px; margin-top: 12px; }
+.np-clear-btn {
+  flex: 0 0 34%; height: 40px; border: 1.5px solid #e2e8f0; border-radius: 9px; background: #fff;
+  color: #64748b; font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit; transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.np-clear-btn:hover { background: #fef2f2; color: #dc2626; border-color: #fecaca; }
+.np-confirm-btn {
+  flex: 1; height: 40px; background: #1e2a3b; color: #fff; border: none; border-radius: 9px; cursor: pointer;
+  font-size: 13px; font-weight: 700; font-family: inherit; display: flex; align-items: center; justify-content: center; gap: 6px; transition: background 0.12s;
+}
+.np-confirm-btn:hover { background: #0f172a; }
 </style>
