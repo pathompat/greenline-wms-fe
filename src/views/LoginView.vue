@@ -100,7 +100,7 @@ async function handleLogin() {
   loading.value = true;
   try {
     await authStore.login(form.value.username, form.value.password);
-    router.push("/dashboard");
+    router.push("/master/products");
   } catch (e) {
     error.value = e.response?.data?.message || e.message || "เกิดข้อผิดพลาด กรุณาลองใหม่";
   } finally {

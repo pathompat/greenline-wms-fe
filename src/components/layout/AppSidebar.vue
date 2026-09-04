@@ -76,21 +76,16 @@ const navGroups = computed(() => [
   {
     label: "เอกสาร",
     items: [
-      { display: false, to: "/documents", icon: "pi pi-file", label: "รายการเอกสาร" },
-      { display: false, to: "/documents/receipt/create", icon: "pi pi-download", label: "รับเข้า (GR)" },
-      { display: false, to: "/documents/requisition/create", icon: "pi pi-upload", label: "เบิก-จ่าย (RQ)" },
-      { display: false, to: "/documents/return/create", icon: "pi pi-reply", label: "คืนสินค้า (RT)" },
+      { display: true, to: "/documents/receipt/create", icon: "pi pi-download", label: "รับเข้า (GR)" },
+      { display: true, to: "/documents/requisition/create", icon: "pi pi-upload", label: "เบิก-จ่าย (RQ)" },
+      { display: true, to: "/documents/return/create", icon: "pi pi-reply", label: "คืนสินค้า (RT)" },
     ],
   },
   {
     label: "สต๊อก",
     items: [
-      { display: false, to: "/stock/by-warehouse", icon: "pi pi-warehouse", label: "สต๊อกแยกคลัง" },
-      { display: false, to: "/stock/lots", icon: "pi pi-list", label: "Lot Tracking" },
-      { display: false, to: "/stock/hold", icon: "pi pi-lock", label: "Hold" },
-      { display: false, to: "/stock/reprocess", icon: "pi pi-sync", label: "Reprocess" },
-      { display: false, to: "/stock/transfer", icon: "pi pi-arrows-h", label: "ย้ายสต๊อก" },
-      { display: false, to: "/stock/min-stock", icon: "pi pi-exclamation-triangle", label: "ตั้ง Min Stock" },
+      { display: true, to: "/stock/by-warehouse", icon: "pi pi-warehouse", label: "สต๊อกแยกคลัง" },
+      { display: true, to: "/stock/lots", icon: "pi pi-list", label: "Lot Tracking" },
     ],
   },
   {
@@ -98,8 +93,6 @@ const navGroups = computed(() => [
     items: [
       { display: true, to: "/production/formulas", icon: "pi pi-book", label: "สูตร / BOM" },
       { display: true, to: "/production/orders", icon: "pi pi-list-check", label: "ใบสั่งผลิต" },
-      { display: false, to: "/production/packing", icon: "pi pi-box", label: "แพ็ค" },
-      { display: false, to: "/production/report", icon: "pi pi-chart-bar", label: "รายงานการผลิต" },
     ],
   },
   {

@@ -57,15 +57,24 @@
           <RouterLink to="/documents" class="see-all">ดูทั้งหมด <i class="pi pi-arrow-right" /></RouterLink>
         </div>
         <DataTable :value="recentDocs" size="small">
-          <Column field="docNo" header="เลขเอกสาร" style="font-family: monospace; font-size: 12px;" />
+          <template #empty>
+            <div class="empty-state"><i class="pi pi-inbox" /> ยังไม่มีเอกสาร</div>
+          </template>
+          <Column header="เลขเอกสาร" style="width: 160px">
+            <template #body="{ data }">
+              <RouterLink :to="`/documents/${data.kind.key}/${data.id}`" class="doc-link">
+                {{ data.docNo }}
+              </RouterLink>
+            </template>
+          </Column>
           <Column header="ประเภท">
             <template #body="{ data }">
-              <span :class="['status-badge', docTypeClass(data.type)]">{{ docTypeLabel(data.type) }}</span>
+              <span :class="['status-badge', data.kind.badgeClass]">{{ data.kind.shortLabel }}</span>
             </template>
           </Column>
           <Column header="สถานะ">
             <template #body="{ data }">
-              <span :class="['status-badge', docStatusClass(data.status)]">{{ docStatusLabel(data.status) }}</span>
+              <span :class="['status-badge', statusClass(data.status)]">{{ statusLabel(data.status) }}</span>
             </template>
           </Column>
           <Column header="วันที่">
@@ -109,19 +118,38 @@
 import { computed, onMounted } from 'vue'
 import { useMasterStore } from '@/stores/master'
 import { useStockStore } from '@/stores/stock'
-import { useDocumentStore } from '@/stores/documents'
+import {
+  DOC_KINDS,
+  useStockDocumentStore,
+  statusClass,
+  statusLabel,
+} from '@/stores/stockDocuments'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
 
 const masterStore = useMasterStore()
 const stockStore = useStockStore()
-const docStore = useDocumentStore()
+const docStore = useStockDocumentStore()
+
+const DOC_KIND_LIST = Object.values(DOC_KINDS)
 
 onMounted(() => {
   if (!masterStore.products.length) masterStore.fetchProducts()
   if (!masterStore.warehouses.length) masterStore.fetchWarehouses()
   if (!masterStore.units.length) masterStore.fetchUnits()
+  // The three documents are separate resources; the dashboard shows the newest
+  // few of each merged together, so it asks each for its own newest page.
+  DOC_KIND_LIST.forEach((kind) => {
+    docStore.fetchList(kind.key, { limit: 5, sortBy: 'createdAt', sortOrder: 'DESC' }).catch(() => {})
+  })
 })
+
+/** Every document on the dashboard, tagged with which resource it came from. */
+const allDocs = computed(() =>
+  DOC_KIND_LIST.flatMap((kind) =>
+    docStore.lists[kind.key].data.map((doc) => ({ ...doc, kind })),
+  ),
+)
 
 const stats = computed(() => [
   {
@@ -134,7 +162,9 @@ const stats = computed(() => [
   },
   {
     label: 'เอกสารรอดำเนินการ',
-    value: docStore.documents.filter(d => ['draft','pending'].includes(d.status)).length,
+    // Counted over the newest few of each kind, not the whole table — the list
+    // endpoints are paginated and the dashboard only pulls one page of each.
+    value: allDocs.value.filter((d) => d.status === 'DRAFT' || d.status === 'IN_PROCESS').length,
     icon: 'pi pi-clock', bg: '#FFFBEB', color: '#D97706',
   },
   {
@@ -151,7 +181,7 @@ const lowStockItems = computed(() => {
 })
 
 const recentDocs = computed(() =>
-  [...docStore.documents].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 5)
+  [...allDocs.value].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 5),
 )
 
 const warehouseSummary = computed(() =>
@@ -178,18 +208,6 @@ function getUnitAbbr(id) {
 }
 function formatDate(dt) {
   return new Date(dt).toLocaleDateString('th-TH', { day: '2-digit', month: 'short', year: '2-digit' })
-}
-function docTypeLabel(t) {
-  return { receipt: 'รับเข้า', requisition: 'เบิก-จ่าย', return: 'คืนสินค้า' }[t] || t
-}
-function docStatusLabel(s) {
-  return { draft: 'Draft', pending: 'รออนุมัติ', approved: 'อนุมัติ', issued: 'จ่ายแล้ว', cancelled: 'ยกเลิก' }[s] || s
-}
-function docTypeClass(t) {
-  return { receipt: 'doc-receipt', requisition: 'doc-requisition', return: 'doc-return' }[t] || ''
-}
-function docStatusClass(s) {
-  return { draft: 'doc-status-draft', pending: 'doc-status-pending', approved: 'doc-status-approved', issued: 'doc-status-issued', cancelled: 'doc-status-cancelled' }[s] || ''
 }
 </script>
 

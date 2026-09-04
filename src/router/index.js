@@ -13,7 +13,7 @@ const routes = [
     component: () => import('@/components/layout/AppLayout.vue'),
     meta: { requiresAuth: true },
     children: [
-      { path: '', redirect: '/dashboard' },
+      { path: '', redirect: '/master/products' },
       { path: 'dashboard', name: 'Dashboard', component: () => import('@/views/DashboardView.vue') },
 
       // Master Data
@@ -36,9 +36,14 @@ const routes = [
       { path: 'documents', name: 'DocumentList', component: () => import('@/views/documents/DocumentListView.vue') },
       { path: 'documents/receipt/create', name: 'ReceiptCreate', component: () => import('@/views/documents/GoodsReceiptView.vue') },
       { path: 'documents/requisition/create', name: 'RequisitionCreate', component: () => import('@/views/documents/RequisitionView.vue') },
-      { path: 'documents/requisition/:id', name: 'RequisitionDetail', component: () => import('@/views/documents/RequisitionView.vue') },
       { path: 'documents/return/create', name: 'ReturnCreate', component: () => import('@/views/documents/ReturnView.vue') },
-      { path: 'documents/:id', name: 'DocumentDetail', component: () => import('@/views/documents/DocumentDetailView.vue') },
+
+      // The three stock documents share one detail page; `docKind` tells it which
+      // resource to read. Declared before 'documents/:id' so the two-segment
+      // legacy route cannot swallow them.
+      { path: 'documents/receipt/:id', name: 'ReceiptDetail', component: () => import('@/views/documents/StockDocumentDetailView.vue'), meta: { docKind: 'receipt' } },
+      { path: 'documents/requisition/:id', name: 'RequisitionDetail', component: () => import('@/views/documents/StockDocumentDetailView.vue'), meta: { docKind: 'requisition' } },
+      { path: 'documents/return/:id', name: 'ReturnDetail', component: () => import('@/views/documents/StockDocumentDetailView.vue'), meta: { docKind: 'return' } },
 
       // Stock
       { path: 'stock/by-warehouse', name: 'StockByWarehouse', component: () => import('@/views/stock/StockByWarehouseView.vue') },
@@ -74,8 +79,8 @@ const router = createRouter({
 router.beforeEach((to) => {
   const auth = useAuthStore()
   if (!to.meta.public && !auth.isAuthenticated) return { name: 'Login' }
-  if (to.meta.adminOnly && !auth.isSuperAdmin) return { name: 'Dashboard' }
-  if (to.path === '/login' && auth.isAuthenticated) return { name: 'Dashboard' }
+  if (to.meta.adminOnly && !auth.isSuperAdmin) return { name: 'ProductList' }
+  if (to.path === '/login' && auth.isAuthenticated) return { name: 'ProductList' }
 })
 
 export default router
