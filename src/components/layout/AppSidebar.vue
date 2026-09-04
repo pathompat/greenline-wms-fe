@@ -76,6 +76,7 @@ const navGroups = computed(() => [
   {
     label: "เอกสาร",
     items: [
+      { display: true, to: "/documents", icon: "pi pi-download", label: "รายการเอกสาร" },
       { display: true, to: "/documents/receipt/create", icon: "pi pi-download", label: "รับเข้า (GR)" },
       { display: true, to: "/documents/requisition/create", icon: "pi pi-upload", label: "เบิก-จ่าย (RQ)" },
       { display: true, to: "/documents/return/create", icon: "pi pi-reply", label: "คืนสินค้า (RT)" },
