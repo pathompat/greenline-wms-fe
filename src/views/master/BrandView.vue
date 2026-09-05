@@ -3,13 +3,38 @@
     <div class="page-header">
       <div>
         <div class="page-title">ชื่อแบรนด์</div>
-        <div class="page-subtitle">จัดการชื่อแบรนด์ ({{ masterStore.brands.length }} รายการ)</div>
+        <div class="page-subtitle">จัดการชื่อแบรนด์ ({{ masterStore.brandListMeta.total }} รายการ)</div>
       </div>
       <Button label="เพิ่มแบรนด์" icon="pi pi-plus" class="btn-primary" @click="openDialog()" />
     </div>
 
     <div class="page-card">
-      <DataTable :value="masterStore.brands" :loading="loading" size="small" stripedRows>
+      <div class="toolbar">
+        <span class="search-wrap">
+          <i class="pi pi-search" />
+          <InputText
+            v-model="search"
+            placeholder='ค้นหาชื่อแบรนด์ หรือชื่อลูกค้า...'
+            style="padding-left: 2.2rem; width: 280px"
+          />
+          <i v-if="search" class="pi pi-times clear-icon" @click="search = ''" />
+        </span>
+      </div>
+      <DataTable
+        :value="masterStore.brandList"
+        :loading="loading"
+        size="small"
+        stripedRows
+        lazy
+        :paginator="true"
+        :rows="masterStore.brandListMeta.limit"
+        :first="(masterStore.brandListMeta.page - 1) * masterStore.brandListMeta.limit"
+        :totalRecords="masterStore.brandListMeta.total"
+        :rowsPerPageOptions="[20, 50, 100]"
+        paginatorTemplate="FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink RowsPerPageDropdown CurrentPageReport"
+        currentPageReportTemplate="{first}–{last} จาก {totalRecords} รายการ"
+        @page="onPage"
+      >
         <template #empty>
           <div class="empty-state">ไม่มีข้อมูลแบรนด์</div>
         </template>
@@ -68,6 +93,7 @@
 
 <script setup>
 import { onMounted, ref } from 'vue'
+import { watchDebounced } from '@vueuse/core'
 import { useConfirm } from 'primevue/useconfirm'
 import { useToast } from 'primevue/usetoast'
 import { useMasterStore } from '@/stores/master'
@@ -82,16 +108,18 @@ const masterStore = useMasterStore()
 const confirm = useConfirm()
 const toast = useToast()
 
+const search = ref('')
 const loading = ref(false)
 const showDialog = ref(false)
 const saving = ref(false)
 const editing = ref(null)
 const form = ref({ name: '', customer: '', isActive: true })
 
-async function fetchBrands() {
+// Fetches one server page; the search term is applied by the backend.
+async function loadPage(page = masterStore.brandListMeta.page, limit = masterStore.brandListMeta.limit) {
   loading.value = true
   try {
-    await masterStore.fetchBrands()
+    await masterStore.fetchBrandList({ page, limit, search: search.value })
   } catch {
     toast.add({ severity: 'error', summary: 'โหลดข้อมูลล้มเหลว', life: 3000 })
   } finally {
@@ -99,7 +127,15 @@ async function fetchBrands() {
   }
 }
 
-onMounted(fetchBrands)
+function onPage(e) {
+  // e.page is 0-based; e.rows is the (possibly changed) page size.
+  loadPage(e.page + 1, e.rows)
+}
+
+// Typing hits the server, so wait for a pause and start back at page 1.
+watchDebounced(search, () => loadPage(1), { debounce: 400 })
+
+onMounted(() => loadPage(1))
 
 function openDialog(item = null) {
   editing.value = item
@@ -131,6 +167,7 @@ async function handleSave() {
       await masterStore.addBrand({ name: form.value.name, customer: form.value.customer || undefined })
       toast.add({ severity: 'success', summary: 'เพิ่มสำเร็จ', life: 3000 })
     }
+    await loadPage()
     showDialog.value = false
   } catch (e) {
     const msg = e.response?.data?.message || 'เกิดข้อผิดพลาด'
@@ -149,6 +186,7 @@ function confirmDelete(item) {
     accept: async () => {
       try {
         await masterStore.deleteBrand(item.id)
+        await loadPage()
         toast.add({ severity: 'success', summary: 'ลบสำเร็จ', life: 3000 })
       } catch (e) {
         const msg = e.response?.data?.message || 'เกิดข้อผิดพลาด'
@@ -160,6 +198,27 @@ function confirmDelete(item) {
 </script>
 
 <style scoped>
+.search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.search-wrap > .pi-search {
+  position: absolute;
+  left: 0.75rem;
+  z-index: 1;
+  color: var(--gl-text-muted);
+}
+.clear-icon {
+  position: absolute;
+  right: 0.75rem;
+  cursor: pointer;
+  color: var(--gl-text-muted);
+  font-size: 12px;
+}
+.clear-icon:hover {
+  color: var(--gl-red);
+}
 .action-btns { display: flex; gap: 4px; }
 .dialog-form { display: flex; flex-direction: column; gap: 14px; }
 .active-row { display: flex; align-items: center; gap: 16px; }

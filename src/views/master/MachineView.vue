@@ -3,13 +3,38 @@
     <div class="page-header">
       <div>
         <div class="page-title">เครื่องจักร</div>
-        <div class="page-subtitle">จัดการเครื่องจักรที่ใช้ในการผลิต ({{ masterStore.machines.length }} เครื่อง)</div>
+        <div class="page-subtitle">จัดการเครื่องจักรที่ใช้ในการผลิต ({{ masterStore.machineListMeta.total }} เครื่อง)</div>
       </div>
       <Button label="เพิ่มเครื่องจักร" icon="pi pi-plus" class="btn-primary" @click="openDialog()" />
     </div>
 
     <div class="page-card">
-      <DataTable :value="masterStore.machines" :loading="loading" size="small" stripedRows>
+      <div class="toolbar">
+        <span class="search-wrap">
+          <i class="pi pi-search" />
+          <InputText
+            v-model="search"
+            placeholder="ค้นหารหัส ชื่อ หรือผู้ผลิต..."
+            style="padding-left: 2.2rem; width: 280px"
+          />
+          <i v-if="search" class="pi pi-times clear-icon" @click="search = ''" />
+        </span>
+      </div>
+      <DataTable
+        :value="masterStore.machineList"
+        :loading="loading"
+        size="small"
+        stripedRows
+        lazy
+        :paginator="true"
+        :rows="masterStore.machineListMeta.limit"
+        :first="(masterStore.machineListMeta.page - 1) * masterStore.machineListMeta.limit"
+        :totalRecords="masterStore.machineListMeta.total"
+        :rowsPerPageOptions="[20, 50, 100]"
+        paginatorTemplate="FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink RowsPerPageDropdown CurrentPageReport"
+        currentPageReportTemplate="{first}–{last} จาก {totalRecords} เครื่อง"
+        @page="onPage"
+      >
         <template #empty>
           <div class="empty-state">ไม่มีข้อมูลเครื่องจักร</div>
         </template>
@@ -112,6 +137,7 @@ import ToggleSwitch from "primevue/toggleswitch";
 import { useConfirm } from "primevue/useconfirm";
 import { useToast } from "primevue/usetoast";
 import { onMounted, ref } from "vue";
+import { watchDebounced } from "@vueuse/core";
 
 const masterStore = useMasterStore();
 const confirm = useConfirm();
@@ -125,6 +151,7 @@ function typeLabel(value) {
   return typeOptions.find((t) => t.value === value)?.label || value;
 }
 
+const search = ref("");
 const loading = ref(false);
 const showDialog = ref(false);
 const saving = ref(false);
@@ -160,10 +187,11 @@ function parseDate(s) {
   return new Date(y, m - 1, d);
 }
 
-async function fetchMachines() {
+// Fetches one server page; the search term is applied by the backend.
+async function loadPage(page = masterStore.machineListMeta.page, limit = masterStore.machineListMeta.limit) {
   loading.value = true;
   try {
-    await masterStore.fetchMachines();
+    await masterStore.fetchMachineList({ page, limit, search: search.value });
   } catch {
     toast.add({ severity: "error", summary: "โหลดข้อมูลล้มเหลว", life: 3000 });
   } finally {
@@ -171,7 +199,15 @@ async function fetchMachines() {
   }
 }
 
-onMounted(fetchMachines);
+function onPage(e) {
+  // e.page is 0-based; e.rows is the (possibly changed) page size.
+  loadPage(e.page + 1, e.rows);
+}
+
+// Typing hits the server, so wait for a pause and start back at page 1.
+watchDebounced(search, () => loadPage(1), { debounce: 400 });
+
+onMounted(() => loadPage(1));
 
 function openDialog(item = null) {
   editing.value = item;
@@ -213,6 +249,7 @@ async function handleSave() {
       await masterStore.addMachine(payload);
       toast.add({ severity: "success", summary: "เพิ่มสำเร็จ", life: 3000 });
     }
+    await loadPage();
     showDialog.value = false;
   } catch (e) {
     const msg = e.response?.data?.message || "เกิดข้อผิดพลาด";
@@ -231,6 +268,7 @@ function confirmDelete(item) {
     accept: async () => {
       try {
         await masterStore.deleteMachine(item.id);
+        await loadPage();
         toast.add({ severity: "success", summary: "ลบสำเร็จ", life: 3000 });
       } catch (e) {
         const msg = e.response?.data?.message || "เกิดข้อผิดพลาด";
@@ -241,6 +279,27 @@ function confirmDelete(item) {
 }
 </script>
 <style scoped>
+.search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.search-wrap > .pi-search {
+  position: absolute;
+  left: 0.75rem;
+  z-index: 1;
+  color: var(--gl-text-muted);
+}
+.clear-icon {
+  position: absolute;
+  right: 0.75rem;
+  cursor: pointer;
+  color: var(--gl-text-muted);
+  font-size: 12px;
+}
+.clear-icon:hover {
+  color: var(--gl-red);
+}
 .type-badge {
   background: var(--gl-bg);
   border: 1px solid var(--gl-border);

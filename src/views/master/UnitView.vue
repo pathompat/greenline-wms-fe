@@ -3,13 +3,38 @@
     <div class="page-header">
       <div>
         <div class="page-title">หน่วยนับ</div>
-        <div class="page-subtitle">จัดการหน่วยนับสินค้า ({{ masterStore.units.length }} หน่วย)</div>
+        <div class="page-subtitle">จัดการหน่วยนับสินค้า ({{ masterStore.unitListMeta.total }} หน่วย)</div>
       </div>
       <Button label="เพิ่มหน่วย" icon="pi pi-plus" class="btn-primary" @click="openDialog()" />
     </div>
 
     <div class="page-card">
-      <DataTable :value="masterStore.units" :loading="loading" size="small" stripedRows>
+      <div class="toolbar">
+        <span class="search-wrap">
+          <i class="pi pi-search" />
+          <InputText
+            v-model="search"
+            placeholder="ค้นหารหัส หรือ ชื่อหน่วย..."
+            style="padding-left: 2.2rem; width: 280px"
+          />
+          <i v-if="search" class="pi pi-times clear-icon" @click="search = ''" />
+        </span>
+      </div>
+      <DataTable
+        :value="masterStore.unitList"
+        :loading="loading"
+        size="small"
+        stripedRows
+        lazy
+        :paginator="true"
+        :rows="masterStore.unitListMeta.limit"
+        :first="(masterStore.unitListMeta.page - 1) * masterStore.unitListMeta.limit"
+        :totalRecords="masterStore.unitListMeta.total"
+        :rowsPerPageOptions="[20, 50, 100]"
+        paginatorTemplate="FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink RowsPerPageDropdown CurrentPageReport"
+        currentPageReportTemplate="{first}–{last} จาก {totalRecords} หน่วย"
+        @page="onPage"
+      >
         <template #empty>
           <div class="empty-state">ไม่มีข้อมูลหน่วยนับ</div>
         </template>
@@ -66,11 +91,13 @@ import InputText from "primevue/inputtext";
 import { useConfirm } from "primevue/useconfirm";
 import { useToast } from "primevue/usetoast";
 import { onMounted, ref } from "vue";
+import { watchDebounced } from "@vueuse/core";
 
 const masterStore = useMasterStore();
 const confirm = useConfirm();
 const toast = useToast();
 
+const search = ref("");
 const loading = ref(false);
 const showDialog = ref(false);
 const saving = ref(false);
@@ -81,10 +108,11 @@ function getUsageCount(unitId) {
   return masterStore.products.filter((p) => p.unitId === unitId).length;
 }
 
-async function fetchUnits() {
+// Fetches one server page; the search term is applied by the backend.
+async function loadPage(page = masterStore.unitListMeta.page, limit = masterStore.unitListMeta.limit) {
   loading.value = true;
   try {
-    await masterStore.fetchUnits();
+    await masterStore.fetchUnitList({ page, limit, search: search.value });
   } catch {
     toast.add({ severity: "error", summary: "โหลดข้อมูลล้มเหลว", life: 3000 });
   } finally {
@@ -92,8 +120,16 @@ async function fetchUnits() {
   }
 }
 
+function onPage(e) {
+  // e.page is 0-based; e.rows is the (possibly changed) page size.
+  loadPage(e.page + 1, e.rows);
+}
+
+// Typing hits the server, so wait for a pause and start back at page 1.
+watchDebounced(search, () => loadPage(1), { debounce: 400 });
+
 onMounted(() => {
-  fetchUnits();
+  loadPage(1);
   if (!masterStore.products.length) masterStore.fetchProducts();
 });
 
@@ -117,6 +153,7 @@ async function handleSave() {
       await masterStore.addUnit({ code: form.value.code, name: form.value.name });
       toast.add({ severity: "success", summary: "เพิ่มสำเร็จ", life: 3000 });
     }
+    await loadPage();
     showDialog.value = false;
   } catch (e) {
     const msg = e.response?.data?.message || "เกิดข้อผิดพลาด";
@@ -135,6 +172,7 @@ function confirmDelete(item) {
     accept: async () => {
       try {
         await masterStore.deleteUnit(item.id);
+        await loadPage();
         toast.add({ severity: "success", summary: "ลบสำเร็จ", life: 3000 });
       } catch (e) {
         const msg = e.response?.data?.message || "เกิดข้อผิดพลาด";
@@ -145,6 +183,27 @@ function confirmDelete(item) {
 }
 </script>
 <style scoped>
+.search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.search-wrap > .pi-search {
+  position: absolute;
+  left: 0.75rem;
+  z-index: 1;
+  color: var(--gl-text-muted);
+}
+.clear-icon {
+  position: absolute;
+  right: 0.75rem;
+  cursor: pointer;
+  color: var(--gl-text-muted);
+  font-size: 12px;
+}
+.clear-icon:hover {
+  color: var(--gl-red);
+}
 .count-badge {
   background: var(--gl-bg);
   border: 1px solid var(--gl-border);

@@ -7,7 +7,7 @@
           บันทึกการรับสินค้าเข้าคลัง — เมื่อ "รับเข้าและเพิ่มสต๊อก" ระบบจะเพิ่มยอดคงเหลือทันที
         </div>
       </div>
-      <RouterLink to="/documents">
+      <RouterLink to="/documents/receipt">
         <Button label="ย้อนกลับ" icon="pi pi-arrow-left" outlined />
       </RouterLink>
     </div>
@@ -184,7 +184,7 @@
 
       <!-- ── Actions ────────────────────────────────────────── -->
       <div class="form-actions">
-        <RouterLink to="/documents"><Button label="ยกเลิก" outlined /></RouterLink>
+        <RouterLink to="/documents/receipt"><Button label="ยกเลิก" outlined /></RouterLink>
         <Button
           label="บันทึกร่าง"
           icon="pi pi-save"

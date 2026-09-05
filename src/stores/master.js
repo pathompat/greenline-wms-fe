@@ -14,6 +14,30 @@ function makeId(prefix) {
   return `${prefix}${Date.now()}`
 }
 
+/**
+ * Walks every page of a paginated list endpoint.
+ *
+ * The master lists are paginated on the server so their own screens can page
+ * through them, but the same data also feeds dropdowns all over the app, which
+ * need the whole set. Those callers use this; the list screens ask for a single
+ * page instead.
+ */
+async function fetchAllPages(apiGet, params = {}) {
+  const limit = 100
+  const first = (await apiGet({ ...params, page: 1, limit })).data
+  let all = first.data || []
+  for (let page = 2; page <= (first.totalPages || 1); page++) {
+    const { data } = await apiGet({ ...params, page, limit })
+    all = all.concat(data.data || [])
+  }
+  return all
+}
+
+/** Fresh paginator state for a list screen. */
+function emptyListMeta(limit = 20) {
+  return { page: 1, limit, total: 0, totalPages: 0 }
+}
+
 // The backend unit model has no separate abbreviation field — `code` (e.g. 'KG')
 // doubles as the short label many other views display as `.abbr`.
 function normalizeUnit(u) {
@@ -51,6 +75,27 @@ export const useMasterStore = defineStore('master', () => {
   const brands = ref([])
   const brandsLoading = ref(false)
 
+  // Server-paginated list state for the master screens. Each is distinct from
+  // the reference cache above, which stays the full set the dropdowns read.
+  const categoryList = ref([])
+  const categoryListLoading = ref(false)
+  const categoryListMeta = ref(emptyListMeta())
+  const unitList = ref([])
+  const unitListLoading = ref(false)
+  const unitListMeta = ref(emptyListMeta())
+  const supplierList = ref([])
+  const supplierListLoading = ref(false)
+  const supplierListMeta = ref(emptyListMeta())
+  const machineList = ref([])
+  const machineListLoading = ref(false)
+  const machineListMeta = ref(emptyListMeta())
+  const packagingSizeList = ref([])
+  const packagingSizeListLoading = ref(false)
+  const packagingSizeListMeta = ref(emptyListMeta())
+  const brandList = ref([])
+  const brandListLoading = ref(false)
+  const brandListMeta = ref(emptyListMeta())
+
   // ---- Warehouses ----
   async function fetchWarehouses() {
     warehousesLoading.value = true
@@ -81,10 +126,25 @@ export const useMasterStore = defineStore('master', () => {
   async function fetchCategories() {
     categoriesLoading.value = true
     try {
-      const { data } = await apiGetCategories()
-      categories.value = data
+      categories.value = await fetchAllPages(apiGetCategories)
     } finally {
       categoriesLoading.value = false
+    }
+  }
+
+  /** One server page for the category screen's table. */
+  async function fetchCategoryList({ page = 1, limit = categoryListMeta.value.limit, search } = {}) {
+    categoryListLoading.value = true
+    try {
+      const params = { page, limit }
+      if (search?.trim()) params.search = search.trim()
+      const { data } = await apiGetCategories(params)
+      categoryList.value = data.data || []
+      categoryListMeta.value = {
+        page: data.page, limit: data.limit, total: data.total, totalPages: data.totalPages,
+      }
+    } finally {
+      categoryListLoading.value = false
     }
   }
   async function addCategory(data) {
@@ -107,10 +167,25 @@ export const useMasterStore = defineStore('master', () => {
   async function fetchUnits() {
     unitsLoading.value = true
     try {
-      const { data } = await apiGetUnits()
-      units.value = data.map(normalizeUnit)
+      units.value = (await fetchAllPages(apiGetUnits)).map(normalizeUnit)
     } finally {
       unitsLoading.value = false
+    }
+  }
+
+  /** One server page for the unit screen's table. */
+  async function fetchUnitList({ page = 1, limit = unitListMeta.value.limit, search } = {}) {
+    unitListLoading.value = true
+    try {
+      const params = { page, limit }
+      if (search?.trim()) params.search = search.trim()
+      const { data } = await apiGetUnits(params)
+      unitList.value = (data.data || []).map(normalizeUnit)
+      unitListMeta.value = {
+        page: data.page, limit: data.limit, total: data.total, totalPages: data.totalPages,
+      }
+    } finally {
+      unitListLoading.value = false
     }
   }
   async function addUnit(data) {
@@ -148,10 +223,25 @@ export const useMasterStore = defineStore('master', () => {
   async function fetchSuppliers() {
     suppliersLoading.value = true
     try {
-      const { data } = await apiGetSuppliers()
-      suppliers.value = data
+      suppliers.value = await fetchAllPages(apiGetSuppliers)
     } finally {
       suppliersLoading.value = false
+    }
+  }
+
+  /** One server page for the supplier screen's table. */
+  async function fetchSupplierList({ page = 1, limit = supplierListMeta.value.limit, search } = {}) {
+    supplierListLoading.value = true
+    try {
+      const params = { page, limit }
+      if (search?.trim()) params.search = search.trim()
+      const { data } = await apiGetSuppliers(params)
+      supplierList.value = data.data || []
+      supplierListMeta.value = {
+        page: data.page, limit: data.limit, total: data.total, totalPages: data.totalPages,
+      }
+    } finally {
+      supplierListLoading.value = false
     }
   }
   async function addSupplier(data) {
@@ -231,10 +321,25 @@ export const useMasterStore = defineStore('master', () => {
   async function fetchMachines() {
     machinesLoading.value = true
     try {
-      const { data } = await apiGetMachines()
-      machines.value = data
+      machines.value = await fetchAllPages(apiGetMachines)
     } finally {
       machinesLoading.value = false
+    }
+  }
+
+  /** One server page for the machine screen's table. */
+  async function fetchMachineList({ page = 1, limit = machineListMeta.value.limit, search } = {}) {
+    machineListLoading.value = true
+    try {
+      const params = { page, limit }
+      if (search?.trim()) params.search = search.trim()
+      const { data } = await apiGetMachines(params)
+      machineList.value = data.data || []
+      machineListMeta.value = {
+        page: data.page, limit: data.limit, total: data.total, totalPages: data.totalPages,
+      }
+    } finally {
+      machineListLoading.value = false
     }
   }
   async function addMachine(data) {
@@ -257,10 +362,25 @@ export const useMasterStore = defineStore('master', () => {
   async function fetchPackagingSizes() {
     packagingSizesLoading.value = true
     try {
-      const { data } = await apiGetPackageSizes()
-      packagingSizes.value = data
+      packagingSizes.value = await fetchAllPages(apiGetPackageSizes)
     } finally {
       packagingSizesLoading.value = false
+    }
+  }
+
+  /** One server page for the packagingSize screen's table. */
+  async function fetchPackagingSizeList({ page = 1, limit = packagingSizeListMeta.value.limit, search } = {}) {
+    packagingSizeListLoading.value = true
+    try {
+      const params = { page, limit }
+      if (search?.trim()) params.search = search.trim()
+      const { data } = await apiGetPackageSizes(params)
+      packagingSizeList.value = data.data || []
+      packagingSizeListMeta.value = {
+        page: data.page, limit: data.limit, total: data.total, totalPages: data.totalPages,
+      }
+    } finally {
+      packagingSizeListLoading.value = false
     }
   }
   async function addPackagingSize(data) {
@@ -284,10 +404,25 @@ export const useMasterStore = defineStore('master', () => {
   async function fetchBrands() {
     brandsLoading.value = true
     try {
-      const { data } = await apiGetBrands()
-      brands.value = data
+      brands.value = await fetchAllPages(apiGetBrands)
     } finally {
       brandsLoading.value = false
+    }
+  }
+
+  /** One server page for the brand screen's table. */
+  async function fetchBrandList({ page = 1, limit = brandListMeta.value.limit, search } = {}) {
+    brandListLoading.value = true
+    try {
+      const params = { page, limit }
+      if (search?.trim()) params.search = search.trim()
+      const { data } = await apiGetBrands(params)
+      brandList.value = data.data || []
+      brandListMeta.value = {
+        page: data.page, limit: data.limit, total: data.total, totalPages: data.totalPages,
+      }
+    } finally {
+      brandListLoading.value = false
     }
   }
   async function addBrand(data) {
@@ -319,18 +454,24 @@ export const useMasterStore = defineStore('master', () => {
     warehouses, warehousesLoading, categories, categoriesLoading, units, unitsLoading,
     suppliers, suppliersLoading, products, productsLoading, machines, machinesLoading, mixsizes,
     productList, productListLoading, productListMeta,
+    categoryList, categoryListLoading, categoryListMeta,
+    unitList, unitListLoading, unitListMeta,
+    supplierList, supplierListLoading, supplierListMeta,
+    machineList, machineListLoading, machineListMeta,
+    packagingSizeList, packagingSizeListLoading, packagingSizeListMeta,
+    brandList, brandListLoading, brandListMeta,
     packagingSizes, packagingSizesLoading, brands, brandsLoading,
 
     fetchWarehouses, addWarehouse, updateWarehouse, deleteWarehouse,
-    fetchCategories, addCategory, updateCategory, deleteCategory,
-    fetchUnits, addUnit, updateUnit, deleteUnit,
+    fetchCategories, fetchCategoryList, addCategory, updateCategory, deleteCategory,
+    fetchUnits, fetchUnitList, addUnit, updateUnit, deleteUnit,
     addMixsize, updateMixsize, deleteMixsize, getMixsizeById,
-    fetchSuppliers, addSupplier, updateSupplier, deleteSupplier,
+    fetchSuppliers, fetchSupplierList, addSupplier, updateSupplier, deleteSupplier,
     fetchProducts, fetchProductList, addProduct, updateProduct, deleteProduct,
 
-    fetchMachines, addMachine, updateMachine, deleteMachine,
-    fetchPackagingSizes, addPackagingSize, updatePackagingSize, deletePackagingSize, getPackagingSizeById,
-    fetchBrands, addBrand, updateBrand, deleteBrand, getBrandById,
+    fetchMachines, fetchMachineList, addMachine, updateMachine, deleteMachine,
+    fetchPackagingSizes, fetchPackagingSizeList, addPackagingSize, updatePackagingSize, deletePackagingSize, getPackagingSizeById,
+    fetchBrands, fetchBrandList, addBrand, updateBrand, deleteBrand, getBrandById,
     getCategoryById, getUnitById, getWarehouseById, getSupplierById, getProductById, getMachineById,
   }
 })

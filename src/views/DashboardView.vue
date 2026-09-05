@@ -54,7 +54,7 @@
             <div class="section-title"><i class="pi pi-file" style="color: var(--gl-navy);" /> เอกสารล่าสุด</div>
             <div class="section-sub">5 รายการล่าสุด</div>
           </div>
-          <RouterLink to="/documents" class="see-all">ดูทั้งหมด <i class="pi pi-arrow-right" /></RouterLink>
+          <RouterLink to="/documents/receipt" class="see-all">ดูทั้งหมด <i class="pi pi-arrow-right" /></RouterLink>
         </div>
         <DataTable :value="recentDocs" size="small">
           <template #empty>

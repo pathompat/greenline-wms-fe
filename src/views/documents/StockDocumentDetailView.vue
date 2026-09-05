@@ -11,7 +11,7 @@
         </div>
       </div>
       <div class="header-actions">
-        <RouterLink to="/documents">
+        <RouterLink :to="`/documents/${kind}`">
           <Button label="ย้อนกลับ" icon="pi pi-arrow-left" outlined />
         </RouterLink>
         <Button
@@ -162,7 +162,9 @@
     <div v-else class="page-card empty-items">
       <i class="pi pi-exclamation-triangle" />
       <div>ไม่พบเอกสารนี้ หรืออาจถูกยกเลิกไปแล้ว</div>
-      <RouterLink to="/documents"><Button label="กลับไปหน้ารายการ" text /></RouterLink>
+      <RouterLink :to="`/documents/${kind}`">
+        <Button label="กลับไปหน้ารายการ" text />
+      </RouterLink>
     </div>
   </div>
 </template>

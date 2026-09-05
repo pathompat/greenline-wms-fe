@@ -3,13 +3,38 @@
     <div class="page-header">
       <div>
         <div class="page-title">ประเภทสินค้า</div>
-        <div class="page-subtitle">จัดการประเภท/หมวดหมู่สินค้า ({{ masterStore.categories.length }} ประเภท)</div>
+        <div class="page-subtitle">จัดการประเภท/หมวดหมู่สินค้า ({{ masterStore.categoryListMeta.total }} ประเภท)</div>
       </div>
       <Button label="เพิ่มประเภท" icon="pi pi-plus" class="btn-primary" @click="openDialog()" />
     </div>
 
     <div class="page-card">
-      <DataTable :value="masterStore.categories" :loading="loading" size="small" stripedRows>
+      <div class="toolbar">
+        <span class="search-wrap">
+          <i class="pi pi-search" />
+          <InputText
+            v-model="search"
+            placeholder="ค้นหารหัส หรือ ชื่อประเภท..."
+            style="padding-left: 2.2rem; width: 280px"
+          />
+          <i v-if="search" class="pi pi-times clear-icon" @click="search = ''" />
+        </span>
+      </div>
+      <DataTable
+        :value="masterStore.categoryList"
+        :loading="loading"
+        size="small"
+        stripedRows
+        lazy
+        :paginator="true"
+        :rows="masterStore.categoryListMeta.limit"
+        :first="(masterStore.categoryListMeta.page - 1) * masterStore.categoryListMeta.limit"
+        :totalRecords="masterStore.categoryListMeta.total"
+        :rowsPerPageOptions="[20, 50, 100]"
+        paginatorTemplate="FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink RowsPerPageDropdown CurrentPageReport"
+        currentPageReportTemplate="{first}–{last} จาก {totalRecords} ประเภท"
+        @page="onPage"
+      >
         <template #empty>
           <div class="empty-state">ไม่มีข้อมูลประเภทสินค้า</div>
         </template>
@@ -92,11 +117,13 @@ import InputText from "primevue/inputtext";
 import { useConfirm } from "primevue/useconfirm";
 import { useToast } from "primevue/usetoast";
 import { computed, onMounted, ref } from "vue";
+import { watchDebounced } from "@vueuse/core";
 
 const masterStore = useMasterStore();
 const confirm = useConfirm();
 const toast = useToast();
 
+const search = ref("");
 const loading = ref(false);
 const showDialog = ref(false);
 const saving = ref(false);
@@ -113,10 +140,11 @@ function getProductCount(catId) {
   return masterStore.products.filter((p) => p.categoryId === catId).length;
 }
 
-async function fetchCategories() {
+// Fetches one server page; the search term is applied by the backend.
+async function loadPage(page = masterStore.categoryListMeta.page, limit = masterStore.categoryListMeta.limit) {
   loading.value = true;
   try {
-    await masterStore.fetchCategories();
+    await masterStore.fetchCategoryList({ page, limit, search: search.value });
   } catch {
     toast.add({ severity: "error", summary: "โหลดข้อมูลล้มเหลว", life: 3000 });
   } finally {
@@ -124,8 +152,19 @@ async function fetchCategories() {
   }
 }
 
+function onPage(e) {
+  // e.page is 0-based; e.rows is the (possibly changed) page size.
+  loadPage(e.page + 1, e.rows);
+}
+
+// Typing hits the server, so wait for a pause and start back at page 1.
+watchDebounced(search, () => loadPage(1), { debounce: 400 });
+
 onMounted(() => {
-  fetchCategories();
+  loadPage(1);
+  // The parent-category column and dropdown need every category, not just the
+  // page the table is showing.
+  if (!masterStore.categories.length) masterStore.fetchCategories();
   if (!masterStore.products.length) masterStore.fetchProducts();
 });
 
@@ -157,6 +196,7 @@ async function handleSave() {
       await masterStore.addCategory({ ...form.value });
       toast.add({ severity: "success", summary: "เพิ่มสำเร็จ", life: 3000 });
     }
+    await loadPage();
     showDialog.value = false;
   } catch (e) {
     const msg = e.response?.data?.message || "เกิดข้อผิดพลาด";
@@ -175,6 +215,7 @@ function confirmDelete(item) {
     accept: async () => {
       try {
         await masterStore.deleteCategory(item.id);
+        await loadPage();
         toast.add({ severity: "success", summary: "ลบสำเร็จ", life: 3000 });
       } catch (e) {
         const msg = e.response?.data?.message || "เกิดข้อผิดพลาด";
@@ -186,6 +227,27 @@ function confirmDelete(item) {
 </script>
 
 <style scoped>
+.search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.search-wrap > .pi-search {
+  position: absolute;
+  left: 0.75rem;
+  z-index: 1;
+  color: var(--gl-text-muted);
+}
+.clear-icon {
+  position: absolute;
+  right: 0.75rem;
+  cursor: pointer;
+  color: var(--gl-text-muted);
+  font-size: 12px;
+}
+.clear-icon:hover {
+  color: var(--gl-red);
+}
 .count-badge {
   background: var(--gl-bg);
   border: 1px solid var(--gl-border);

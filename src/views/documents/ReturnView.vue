@@ -7,7 +7,7 @@
           คืนสินค้าที่เหลือจากการผลิตกลับเข้าคลัง — ของที่คืนต้องระบุ Lot เดิมที่เบิกออกไป
         </div>
       </div>
-      <RouterLink to="/documents">
+      <RouterLink to="/documents/return">
         <Button label="ย้อนกลับ" icon="pi pi-arrow-left" outlined />
       </RouterLink>
     </div>
@@ -147,7 +147,7 @@
       </div>
 
       <div class="form-actions">
-        <RouterLink to="/documents"><Button label="ยกเลิก" outlined /></RouterLink>
+        <RouterLink to="/documents/return"><Button label="ยกเลิก" outlined /></RouterLink>
         <Button label="บันทึกร่าง" icon="pi pi-save" outlined :loading="saving" @click="saveDraft" />
         <Button label="ส่งอนุมัติ" icon="pi pi-send" outlined :loading="saving" @click="submit" />
         <Button

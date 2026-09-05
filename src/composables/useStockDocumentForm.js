@@ -62,7 +62,7 @@ export function useStockDocumentForm(kind, { validate, buildPayload }) {
         detail: `${config.label} ${doc.docNo}`,
         life: 4000,
       })
-      router.push('/documents')
+      router.push(`/documents/${kind}`)
       return doc
     } catch (error) {
       reportError(error, `บันทึก${config.label}ไม่สำเร็จ`)

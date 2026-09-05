@@ -32,15 +32,19 @@ const routes = [
       // Admin
       { path: 'admin/users', name: 'Users', component: () => import('@/views/admin/UserRoleView.vue'), meta: { adminOnly: true } },
 
-      // Documents
-      { path: 'documents', name: 'DocumentList', component: () => import('@/views/documents/DocumentListView.vue') },
+      // Documents — each kind has its own list, create and detail page. All
+      // three lists share one component; `docKind` tells it which resource to
+      // read, as it does for the detail page.
+      { path: 'documents', redirect: '/documents/receipt' },
+      { path: 'documents/receipt', name: 'ReceiptList', component: () => import('@/views/documents/StockDocumentListView.vue'), meta: { docKind: 'receipt' } },
+      { path: 'documents/requisition', name: 'RequisitionList', component: () => import('@/views/documents/StockDocumentListView.vue'), meta: { docKind: 'requisition' } },
+      { path: 'documents/return', name: 'ReturnList', component: () => import('@/views/documents/StockDocumentListView.vue'), meta: { docKind: 'return' } },
+
       { path: 'documents/receipt/create', name: 'ReceiptCreate', component: () => import('@/views/documents/GoodsReceiptView.vue') },
       { path: 'documents/requisition/create', name: 'RequisitionCreate', component: () => import('@/views/documents/RequisitionView.vue') },
       { path: 'documents/return/create', name: 'ReturnCreate', component: () => import('@/views/documents/ReturnView.vue') },
 
-      // The three stock documents share one detail page; `docKind` tells it which
-      // resource to read. Declared before 'documents/:id' so the two-segment
-      // legacy route cannot swallow them.
+      // Detail pages, likewise sharing one component.
       { path: 'documents/receipt/:id', name: 'ReceiptDetail', component: () => import('@/views/documents/StockDocumentDetailView.vue'), meta: { docKind: 'receipt' } },
       { path: 'documents/requisition/:id', name: 'RequisitionDetail', component: () => import('@/views/documents/StockDocumentDetailView.vue'), meta: { docKind: 'requisition' } },
       { path: 'documents/return/:id', name: 'ReturnDetail', component: () => import('@/views/documents/StockDocumentDetailView.vue'), meta: { docKind: 'return' } },
