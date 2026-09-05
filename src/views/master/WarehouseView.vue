@@ -198,7 +198,8 @@ function confirmDelete(item) {
   confirm.require({
     message: `ลบคลัง "${item.name}" ใช่หรือไม่?`,
     header: "ยืนยันการลบ",
-    icon: "pi pi-exclamation-triangle",
+    icon: "pi pi-trash",
+    acceptLabel: "ลบคลัง",
     acceptClass: "p-button-danger",
     accept: async () => {
       try {

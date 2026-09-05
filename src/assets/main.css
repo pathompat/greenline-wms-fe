@@ -1,25 +1,56 @@
 /* ===== Greenline WMS — Global Styles ===== */
 
 :root {
-  --gl-navy: #0D2461;
+  /* Brand */
+  --gl-navy: #0d2461;
   --gl-navy-dark: #091847;
   --gl-navy-light: #1a3a7c;
   --gl-navy-muted: #2a4a8c;
-  --gl-red: #DC2626;
-  --gl-red-light: #FEF2F2;
-  --gl-red-hover: #B91C1C;
+  --gl-navy-tint: #eef2fb;
+
+  --gl-red: #dc2626;
+  --gl-red-light: #fef2f2;
+  --gl-red-hover: #b91c1c;
+
+  /* Sidebar */
   --gl-sidebar-bg: #0a1628;
   --gl-sidebar-text: #c8d8f0;
   --gl-sidebar-active: rgba(220, 38, 38, 0.15);
   --gl-sidebar-hover: rgba(255, 255, 255, 0.07);
+
+  /* Neutrals — one ramp, so greys stop being invented per component */
   --gl-surface: #ffffff;
-  --gl-bg: #F1F5F9;
-  --gl-border: #E2E8F0;
-  --gl-text: #1E293B;
-  --gl-text-muted: #64748B;
-  --gl-success: #16A34A;
-  --gl-warning: #D97706;
-  --gl-info: #0284C7;
+  --gl-bg: #f5f7fa;
+  --gl-border: #e2e8f0;
+  --gl-border-strong: #cbd5e1;
+  --gl-text: #1e293b;
+  --gl-text-muted: #64748b;
+  --gl-text-subtle: #94a3b8;
+  --gl-hover: #f8fafc;
+
+  /* Semantic */
+  --gl-success: #16a34a;
+  --gl-success-tint: #dcfce7;
+  --gl-warning: #d97706;
+  --gl-warning-tint: #fef3c7;
+  --gl-info: #0284c7;
+  --gl-info-tint: #e0f2fe;
+  --gl-danger-tint: #fee2e2;
+
+  /* Shape */
+  --gl-radius-sm: 6px;
+  --gl-radius: 10px;
+  --gl-radius-lg: 14px;
+  --gl-radius-pill: 999px;
+
+  /* Elevation — two levels only: resting and floating */
+  --gl-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06);
+  --gl-shadow-lg: 0 10px 15px -3px rgba(15, 23, 42, 0.08), 0 4px 6px -4px rgba(15, 23, 42, 0.06);
+
+  /* Type */
+  --gl-font: 'IBM Plex Sans Thai', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --gl-font-mono: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
+
   --header-h: 64px;
   --sidebar-w: 260px;
   --sidebar-w-collapsed: 72px;
@@ -31,34 +62,69 @@
   padding: 0;
 }
 
-html, body {
-  font-family: 'Kanit', sans-serif;
+html,
+body {
+  font-family: var(--gl-font);
   background: var(--gl-bg);
   color: var(--gl-text);
   font-size: 14px;
-  line-height: 1.5;
+  line-height: 1.55;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 /* ===== PrimeVue overrides ===== */
+/* One font declaration for every widget, instead of repeating it per component. */
+.p-component,
+.p-component * {
+  font-family: var(--gl-font);
+}
+
+/*
+ * ...except the icons. PrimeIcons draws glyphs from its own font, and the
+ * descendant selector above outranks its `.pi` rule, which turns every icon
+ * into a tofu box. Put the icon font back, more specifically than that rule.
+ */
+.p-component .pi,
+.p-component .pi::before,
+.pi,
+.pi::before {
+  font-family: 'primeicons' !important;
+}
+
 .p-button {
-  font-family: 'Kanit', sans-serif !important;
   font-weight: 500 !important;
+  border-radius: var(--gl-radius-sm) !important;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 
-.p-inputtext, .p-dropdown, .p-multiselect, .p-calendar,
-.p-textarea, .p-inputnumber {
-  font-family: 'Kanit', sans-serif !important;
+.p-inputtext,
+.p-select,
+.p-dropdown,
+.p-multiselect,
+.p-calendar,
+.p-datepicker-input,
+.p-textarea,
+.p-inputnumber-input {
+  border-radius: var(--gl-radius-sm) !important;
 }
 
+/* ---- DataTable ---- */
+/*
+ * The header used to be solid navy, which made every table shout and left the
+ * data competing with its own chrome. A light header with a firm rule reads as
+ * structure instead.
+ */
 .p-datatable .p-datatable-thead > tr > th {
-  background: var(--gl-navy) !important;
-  color: #ffffff !important;
-  font-family: 'Kanit', sans-serif !important;
-  font-weight: 500 !important;
-  font-size: 13px;
-  padding: 10px 14px !important;
-  border-color: var(--gl-navy-light) !important;
+  background: var(--gl-hover) !important;
+  color: var(--gl-text-muted) !important;
+  font-weight: 600 !important;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  padding: 11px 14px !important;
+  border-color: var(--gl-border) !important;
+  border-bottom: 2px solid var(--gl-border-strong) !important;
+  white-space: nowrap;
 }
 
 .p-datatable .p-datatable-tbody > tr {
@@ -66,44 +132,127 @@ html, body {
 }
 
 .p-datatable .p-datatable-tbody > tr:hover {
-  background: #EEF2FF !important;
+  background: var(--gl-navy-tint) !important;
 }
 
 .p-datatable .p-datatable-tbody > tr > td {
-  padding: 10px 14px !important;
+  padding: 11px 14px !important;
   font-size: 13px;
   border-color: var(--gl-border) !important;
 }
 
+/* Quantities line up column-wise only with tabular figures. */
+.p-datatable td,
+.mono,
+.qty-ok,
+.qty-low {
+  font-variant-numeric: tabular-nums;
+}
+
+.p-datatable .p-paginator {
+  border: none !important;
+  background: transparent !important;
+  padding-top: 14px !important;
+}
+
+/* Row action icons stay quiet until pointed at — a table of red trash cans
+   reads as a table full of problems. */
+.p-datatable .p-button.p-button-text {
+  color: var(--gl-text-subtle) !important;
+}
+.p-datatable .p-button.p-button-text:hover {
+  color: var(--gl-navy) !important;
+  background: var(--gl-navy-tint) !important;
+}
+.p-datatable .p-button.p-button-text.p-button-danger:hover {
+  color: var(--gl-red) !important;
+  background: var(--gl-red-light) !important;
+}
+
+/* ---- Dialog ---- */
+.p-dialog {
+  border-radius: var(--gl-radius-lg) !important;
+  box-shadow: var(--gl-shadow-lg) !important;
+  overflow: hidden;
+}
+
 .p-dialog .p-dialog-header {
-  background: var(--gl-navy) !important;
-  color: #fff !important;
-  padding: 16px 20px !important;
-  font-family: 'Kanit', sans-serif !important;
+  background: var(--gl-surface) !important;
+  color: var(--gl-text) !important;
+  padding: 18px 22px 14px !important;
   font-weight: 600 !important;
+  font-size: 16px;
+  border-bottom: 1px solid var(--gl-border);
 }
 
 .p-dialog .p-dialog-header .p-dialog-header-icon {
-  color: #fff !important;
+  color: var(--gl-text-subtle) !important;
+}
+.p-dialog .p-dialog-header .p-dialog-header-icon:hover {
+  color: var(--gl-text) !important;
 }
 
 .p-dialog .p-dialog-content {
-  padding: 20px !important;
-  font-family: 'Kanit', sans-serif !important;
+  padding: 20px 22px !important;
 }
 
 .p-dialog .p-dialog-footer {
-  padding: 12px 20px !important;
+  padding: 14px 22px 18px !important;
   border-top: 1px solid var(--gl-border);
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
-.p-toast .p-toast-message-content {
-  font-family: 'Kanit', sans-serif !important;
+/* ---- Confirm dialog ---- */
+/*
+ * Two filled buttons side by side made "ยกเลิก" look like the recommended path.
+ * The way out is quiet text; the action carries the weight, and only a genuinely
+ * destructive one is red (see `useConfirmAction`).
+ */
+.p-confirmdialog .p-confirmdialog-message {
+  margin-left: 14px;
+  line-height: 1.6;
+}
+
+.p-confirmdialog .p-confirmdialog-icon {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  border-radius: var(--gl-radius-pill);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  background: var(--gl-warning-tint);
+  color: var(--gl-warning);
+}
+
+.p-confirmdialog .p-confirmdialog-icon.pi-trash,
+.p-confirmdialog .p-confirmdialog-icon.pi-times-circle {
+  background: var(--gl-danger-tint);
+  color: var(--gl-red);
+}
+
+.p-confirmdialog .p-confirmdialog-reject-button {
+  background: transparent !important;
+  border-color: transparent !important;
+  color: var(--gl-text-muted) !important;
+}
+.p-confirmdialog .p-confirmdialog-reject-button:hover {
+  background: var(--gl-hover) !important;
+  color: var(--gl-text) !important;
+}
+
+/* ---- Toast / tag / breadcrumb ---- */
+.p-toast .p-toast-message {
+  border-radius: var(--gl-radius) !important;
+  box-shadow: var(--gl-shadow-lg) !important;
 }
 
 .p-tag {
-  font-family: 'Kanit', sans-serif !important;
   font-size: 11px !important;
+  border-radius: var(--gl-radius-sm) !important;
 }
 
 .p-breadcrumb {
@@ -131,6 +280,15 @@ html, body {
   margin-left: var(--sidebar-w-collapsed);
 }
 
+/*
+ * The header is fixed, so it is positioned against the viewport rather than
+ * carried by `.app-content`'s margin — it needs the same offset applied to its
+ * own `left`, or it stays put while everything under it slides.
+ */
+.app-content.sidebar-collapsed .app-header {
+  left: var(--sidebar-w-collapsed);
+}
+
 .page-body {
   flex: 1;
   padding: 24px;
@@ -140,15 +298,17 @@ html, body {
 /* ===== Page Card ===== */
 .page-card {
   background: var(--gl-surface);
-  border-radius: 10px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.05);
+  border: 1px solid var(--gl-border);
+  border-radius: var(--gl-radius);
+  box-shadow: var(--gl-shadow);
   padding: 20px;
 }
 
 .page-title {
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 600;
   color: var(--gl-navy);
+  letter-spacing: -0.01em;
   margin-bottom: 4px;
 }
 
@@ -160,11 +320,17 @@ html, body {
 
 .page-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   margin-bottom: 20px;
   flex-wrap: wrap;
   gap: 12px;
+}
+
+/* The subtitle's bottom margin is meant for the standalone heading block; inside
+   the flex header it just pushes the row out of alignment. */
+.page-header .page-subtitle {
+  margin-bottom: 0;
 }
 
 /* ===== Status Badge ===== */
@@ -173,34 +339,34 @@ html, body {
   align-items: center;
   gap: 5px;
   padding: 3px 10px;
-  border-radius: 999px;
+  border-radius: var(--gl-radius-pill);
   font-size: 12px;
   font-weight: 500;
+  white-space: nowrap;
 }
 
-.status-rm { background: #DBEAFE; color: #1D4ED8; }
-.status-semi { background: #FEF3C7; color: #92400E; }
-.status-fg { background: #D1FAE5; color: #065F46; }
-.status-hold { background: #FEE2E2; color: #991B1B; }
-.status-reprocess { background: #EDE9FE; color: #5B21B6; }
+.status-rm { background: #dbeafe; color: #1d4ed8; }
+.status-semi { background: var(--gl-warning-tint); color: #92400e; }
+.status-fg { background: var(--gl-success-tint); color: #065f46; }
+.status-hold { background: var(--gl-danger-tint); color: #991b1b; }
+.status-reprocess { background: #ede9fe; color: #5b21b6; }
 
-.doc-receipt { background: #D1FAE5; color: #065F46; }
-.doc-requisition { background: #DBEAFE; color: #1D4ED8; }
-.doc-issue { background: #FEF3C7; color: #92400E; }
-.doc-return { background: #E0E7FF; color: #3730A3; }
+.doc-receipt { background: var(--gl-success-tint); color: #065f46; }
+.doc-requisition { background: #dbeafe; color: #1d4ed8; }
+.doc-issue { background: var(--gl-warning-tint); color: #92400e; }
+.doc-return { background: #e0e7ff; color: #3730a3; }
 
-.doc-status-draft { background: #F1F5F9; color: #475569; }
-.doc-status-pending { background: #FEF3C7; color: #92400E; }
-.doc-status-approved { background: #D1FAE5; color: #065F46; }
-.doc-status-issued { background: #DBEAFE; color: #1D4ED8; }
-.doc-status-rejected { background: #FEE2E2; color: #991B1B; }
-.doc-status-cancelled { background: #F1F5F9; color: #94A3B8; }
+.doc-status-draft { background: #f1f5f9; color: #475569; }
+.doc-status-pending { background: var(--gl-warning-tint); color: #92400e; }
+.doc-status-approved { background: var(--gl-success-tint); color: #065f46; }
+.doc-status-issued { background: #dbeafe; color: #1d4ed8; }
+.doc-status-rejected { background: var(--gl-danger-tint); color: #991b1b; }
+.doc-status-cancelled { background: #f1f5f9; color: #94a3b8; }
 
 /* ===== Buttons ===== */
 .btn-primary {
   background: var(--gl-navy) !important;
   border-color: var(--gl-navy) !important;
-  font-family: 'Kanit', sans-serif !important;
   font-weight: 500 !important;
 }
 .btn-primary:hover {
@@ -211,7 +377,6 @@ html, body {
 .btn-danger {
   background: var(--gl-red) !important;
   border-color: var(--gl-red) !important;
-  font-family: 'Kanit', sans-serif !important;
   font-weight: 500 !important;
 }
 .btn-danger:hover {
@@ -228,11 +393,13 @@ html, body {
 
 .form-grid-3 {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   gap: 16px;
 }
 
-.form-full { grid-column: 1 / -1; }
+.form-full {
+  grid-column: 1 / -1;
+}
 
 .field-label {
   display: block;
@@ -247,6 +414,24 @@ html, body {
   margin-left: 2px;
 }
 
+/*
+ * `.w-full` is applied to inputs across fifteen views but was never defined, so
+ * every dropdown and textarea sat at its intrinsic width inside a full-width
+ * grid cell. PrimeVue renders most controls as a wrapper element, hence the
+ * descendant rules.
+ */
+.w-full {
+  width: 100% !important;
+}
+.w-full .p-inputtext,
+.w-full .p-select-label,
+.w-full .p-dropdown-label,
+.w-full .p-inputnumber,
+.w-full .p-inputnumber-input,
+.w-full .p-datepicker-input {
+  width: 100% !important;
+}
+
 /* ===== Search toolbar ===== */
 .toolbar {
   display: flex;
@@ -256,12 +441,61 @@ html, body {
   flex-wrap: wrap;
 }
 
+/* Search fields share one shape wherever they appear. */
+.search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.search-wrap > .pi:first-child {
+  position: absolute;
+  left: 0.75rem;
+  z-index: 1;
+  color: var(--gl-text-subtle);
+  font-size: 13px;
+}
+.search-wrap .clear-icon {
+  position: absolute;
+  right: 0.75rem;
+  cursor: pointer;
+  color: var(--gl-text-subtle);
+  font-size: 12px;
+}
+.search-wrap .clear-icon:hover {
+  color: var(--gl-red);
+}
+
+/* ===== Empty & loading states ===== */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 40px 16px;
+  color: var(--gl-text-muted);
+  font-size: 14px;
+}
+.empty-state > .pi {
+  font-size: 30px;
+  opacity: 0.45;
+}
+
+.loading-card {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--gl-text-muted);
+  padding: 40px;
+}
+
 /* ===== Stats card ===== */
 .stat-card {
   background: var(--gl-surface);
-  border-radius: 10px;
+  border: 1px solid var(--gl-border);
+  border-radius: var(--gl-radius);
   padding: 18px 20px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.07);
+  box-shadow: var(--gl-shadow);
   display: flex;
   align-items: center;
   gap: 16px;
@@ -283,6 +517,7 @@ html, body {
   font-weight: 700;
   color: var(--gl-navy);
   line-height: 1;
+  font-variant-numeric: tabular-nums;
 }
 
 .stat-info .stat-label {
@@ -291,24 +526,62 @@ html, body {
   margin-top: 4px;
 }
 
+/* ===== Utilities ===== */
+.mono {
+  font-family: var(--gl-font-mono);
+  font-size: 12px;
+}
+
+.muted {
+  color: var(--gl-text-muted);
+}
+
 /* ===== Scrollbar ===== */
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--gl-border-strong);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--gl-text-subtle);
+}
 
 /* ===== Transitions ===== */
-.fade-enter-active, .fade-leave-active { transition: opacity 0.2s; }
-.fade-enter-from, .fade-leave-to { opacity: 0; }
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
 
-.slide-up-enter-active { transition: all 0.25s ease; }
-.slide-up-enter-from { opacity: 0; transform: translateY(12px); }
+.slide-up-enter-active {
+  transition: all 0.25s ease;
+}
+.slide-up-enter-from {
+  opacity: 0;
+  transform: translateY(12px);
+}
 
 /* ===== Print ===== */
 @media print {
   .sidebar,
   .app-header,
-  .no-print { display: none !important; }
-  .app-content { margin-left: 0 !important; }
-  .page-body { padding: 0 !important; margin-top: 0 !important; }
+  .no-print {
+    display: none !important;
+  }
+  .app-content {
+    margin-left: 0 !important;
+  }
+  .page-body {
+    padding: 0 !important;
+    margin-top: 0 !important;
+  }
 }

@@ -102,7 +102,7 @@ function checkStock() {
 .notif-tab {
   display: flex; align-items: center; gap: 8px;
   padding: 8px 16px; border-radius: 8px; border: 1px solid var(--gl-border);
-  background: var(--gl-surface); cursor: pointer; font-family: 'Kanit', sans-serif;
+  background: var(--gl-surface); cursor: pointer; font-family: var(--gl-font);
   font-size: 13px; color: var(--gl-text-muted); transition: all 0.15s;
 }
 .notif-tab:hover { background: var(--gl-bg); }

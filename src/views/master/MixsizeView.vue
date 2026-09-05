@@ -126,7 +126,8 @@ function confirmDelete(item) {
   confirm.require({
     message: `ลบ Mixsize "${getMixsizeLabel(item)}" ใช่หรือไม่?`,
     header: 'ยืนยันการลบ',
-    icon: 'pi pi-exclamation-triangle',
+    icon: 'pi pi-trash',
+    acceptLabel: 'ลบ Mixsize',
     acceptClass: 'p-button-danger',
     accept: () => {
       masterStore.deleteMixsize(item.id)

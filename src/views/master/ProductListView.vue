@@ -143,7 +143,8 @@ function confirmDelete(product) {
   confirm.require({
     message: `ต้องการลบสินค้า "${product.name}" ใช่หรือไม่?`,
     header: 'ยืนยันการลบ',
-    icon: 'pi pi-exclamation-triangle',
+    icon: 'pi pi-trash',
+    acceptLabel: 'ลบสินค้า',
     acceptClass: 'p-button-danger',
     accept: async () => {
       try {

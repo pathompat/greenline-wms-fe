@@ -136,6 +136,12 @@
               <RouterLink :to="`/documents/${kind}/${data.id}`">
                 <Button icon="pi pi-eye" size="small" text rounded v-tooltip="'ดูรายละเอียด'" />
               </RouterLink>
+              <RouterLink
+                v-if="data.status === 'DRAFT'"
+                :to="`/documents/${kind}/${data.id}/edit`"
+              >
+                <Button icon="pi pi-pencil" size="small" text rounded v-tooltip="'แก้ไข'" />
+              </RouterLink>
               <Button
                 v-if="data.status === 'DRAFT'"
                 icon="pi pi-send"
@@ -146,7 +152,7 @@
                 @click="changeStatus(data, 'IN_PROCESS')"
               />
               <Button
-                v-if="data.status === 'IN_PROCESS'"
+                v-if="data.status === 'DRAFT' || data.status === 'IN_PROCESS'"
                 icon="pi pi-check"
                 size="small"
                 text
@@ -321,7 +327,7 @@ function confirmPost(doc) {
     icon: 'pi pi-exclamation-triangle',
     acceptLabel: `ยืนยัน ${config.value.effect}`,
     rejectLabel: 'ยกเลิก',
-    acceptClass: 'p-button-danger',
+    acceptClass: 'btn-primary',
     accept: () => changeStatus(doc, 'SUCCESS'),
   })
 }
@@ -329,6 +335,7 @@ function confirmPost(doc) {
 function confirmCancel(doc) {
   confirm.require({
     header: 'ยกเลิกเอกสาร',
+    icon: 'pi pi-times-circle',
     message: `ต้องการยกเลิกเอกสาร ${doc.docNo} หรือไม่? เลขที่เอกสารนี้จะถูกปล่อยให้ใช้ซ้ำได้`,
     icon: 'pi pi-exclamation-triangle',
     acceptLabel: 'ยกเลิกเอกสาร',
@@ -386,7 +393,7 @@ onMounted(() => {
   text-decoration: underline;
 }
 .mono {
-  font-family: monospace;
+  font-family: var(--gl-font-mono);
 }
 .muted {
   color: var(--gl-text-muted);

@@ -2,17 +2,24 @@
   <div>
     <div class="page-header">
       <div>
-        <div class="page-title">สร้างใบเบิก-จ่าย (Requisition)</div>
+        <div class="page-title">
+          {{ isEditing ? 'แก้ไขใบเบิก-จ่าย' : 'สร้างใบเบิก-จ่าย (Requisition)' }}
+          <span v-if="isEditing && docNo" class="mono doc-no">{{ docNo }}</span>
+        </div>
         <div class="page-subtitle">
           เบิกสินค้าออกจากคลัง — เมื่อ "จ่ายของ" ระบบจะตัดสต๊อกทันที และเบิกเกินยอดคงเหลือไม่ได้
         </div>
       </div>
-      <RouterLink to="/documents/requisition">
+      <RouterLink :to="backTo">
         <Button label="ย้อนกลับ" icon="pi pi-arrow-left" outlined />
       </RouterLink>
     </div>
 
-    <div class="page-card">
+    <div v-if="loadingDoc" class="page-card loading-card">
+      <i class="pi pi-spin pi-spinner" /> กำลังโหลดเอกสาร...
+    </div>
+
+    <div v-else class="page-card">
       <div class="form-grid-3">
         <div>
           <label class="field-label">คลังที่เบิก <span class="req">*</span></label>
@@ -155,7 +162,7 @@
       </div>
 
       <div class="form-actions">
-        <RouterLink to="/documents/requisition"><Button label="ยกเลิก" outlined /></RouterLink>
+        <RouterLink :to="backTo"><Button label="ยกเลิก" outlined /></RouterLink>
         <Button label="บันทึกร่าง" icon="pi pi-save" outlined :loading="saving" @click="saveDraft" />
         <Button label="ส่งอนุมัติ" icon="pi pi-send" outlined :loading="saving" @click="submit" />
         <Button
@@ -171,10 +178,12 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
 import { useMasterStore } from '@/stores/master'
 import { useStockStore } from '@/stores/stock'
+import { useStockDocumentStore, statusLabel } from '@/stores/stockDocuments'
 import { useStockDocumentForm } from '@/composables/useStockDocumentForm'
 import { toIsoDate, formatThaiDate } from '@/utils/date'
 import Button from 'primevue/button'
@@ -186,9 +195,21 @@ import Message from 'primevue/message'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
 
+const route = useRoute()
+const router = useRouter()
 const toast = useToast()
 const masterStore = useMasterStore()
 const stockStore = useStockStore()
+const docStore = useStockDocumentStore()
+
+// With an id in the route the page edits that draft; without one it creates.
+const documentId = computed(() => (route.params.id ? Number(route.params.id) : null))
+const docNo = ref('')
+const loadingDoc = ref(false)
+
+const backTo = computed(() =>
+  documentId.value ? `/documents/requisition/${documentId.value}` : '/documents/requisition',
+)
 
 const form = ref({ warehouseId: null, docDate: new Date(), remark: '', items: [] })
 const productToAdd = ref(null)
@@ -325,7 +346,7 @@ function buildPayload() {
   return {
     warehouseId: form.value.warehouseId,
     docDate: toIsoDate(form.value.docDate),
-    remark: form.value.remark || undefined,
+    remark: form.value.remark || null,
     items: form.value.items.map((item) => ({
       productId: item.productId,
       quantity: item.quantity,
@@ -334,19 +355,73 @@ function buildPayload() {
   }
 }
 
-const { saving, saveDraft, submit, confirmAndPost } = useStockDocumentForm('requisition', {
-  validate,
-  buildPayload,
-})
+const { saving, isEditing, saveDraft, submit, confirmAndPost } = useStockDocumentForm(
+  'requisition',
+  { validate, buildPayload, documentId },
+)
+
+/**
+ * Fills the form from the draft named in the route. Only a `DRAFT` accepts
+ * edits — the backend rejects anything later — so a document that has moved on
+ * is sent back to its read-only detail page rather than shown in a form whose
+ * save would fail.
+ */
+async function loadDraft() {
+  if (!documentId.value) return
+  loadingDoc.value = true
+  try {
+    const doc = await docStore.fetchOne('requisition', documentId.value)
+    if (doc.status !== 'DRAFT') {
+      toast.add({
+        severity: 'warn',
+        summary: 'เอกสารนี้แก้ไขไม่ได้แล้ว',
+        detail: `สถานะปัจจุบันคือ "${statusLabel(doc.status)}"`,
+        life: 5000,
+      })
+      router.replace(`/documents/requisition/${documentId.value}`)
+      return
+    }
+    docNo.value = doc.docNo
+    form.value = {
+      warehouseId: doc.warehouseId,
+      docDate: new Date(doc.docDate),
+      remark: doc.remark || '',
+      items: (doc.items || []).map((item) => ({
+        productId: item.productId,
+        quantity: item.quantity,
+        lotId: item.lotId ?? null,
+      })),
+    }
+    // The lot pickers are populated per product, and the saved lines already
+    // name one — load their options so the selection has something to match.
+  form.value.items.forEach((item) => loadAvailability(item.productId))
+  } catch (error) {
+    toast.add({
+      severity: 'error',
+      summary: 'โหลดเอกสารไม่สำเร็จ',
+      detail: error.response?.data?.message || error.message,
+      life: 5000,
+    })
+    router.replace('/documents/requisition')
+  } finally {
+    loadingDoc.value = false
+  }
+}
 
 onMounted(() => {
   if (!masterStore.warehouses.length) masterStore.fetchWarehouses()
   if (!masterStore.products.length) masterStore.fetchProducts()
   if (!masterStore.units.length) masterStore.fetchUnits()
+  loadDraft()
 })
 </script>
 
 <style scoped>
+.doc-no {
+  font-size: 15px;
+  color: var(--gl-text-muted);
+  margin-left: 8px;
+}
 .divider {
   height: 1px;
   background: var(--gl-border);
@@ -388,7 +463,7 @@ onMounted(() => {
   flex: 1;
 }
 .opt-sku {
-  font-family: monospace;
+  font-family: var(--gl-font-mono);
   font-size: 11px;
   color: var(--gl-text-muted);
 }
@@ -422,7 +497,7 @@ onMounted(() => {
   color: var(--gl-text-muted);
 }
 .mono {
-  font-family: monospace;
+  font-family: var(--gl-font-mono);
 }
 .muted {
   color: var(--gl-text-muted);

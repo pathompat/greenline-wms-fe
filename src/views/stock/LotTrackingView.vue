@@ -335,7 +335,7 @@ onMounted(load)
 }
 
 .lot-no {
-  font-family: monospace;
+  font-family: var(--gl-font-mono);
   font-size: 12px;
   color: var(--gl-navy);
   font-weight: 600;
@@ -349,7 +349,7 @@ onMounted(load)
   margin-top: 2px;
 }
 .mono {
-  font-family: monospace;
+  font-family: var(--gl-font-mono);
 }
 .muted {
   color: var(--gl-text-muted);

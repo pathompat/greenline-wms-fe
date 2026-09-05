@@ -263,7 +263,8 @@ function confirmDelete(item) {
   confirm.require({
     message: `ลบเครื่องจักร "${item.name}" ใช่หรือไม่?`,
     header: "ยืนยันการลบ",
-    icon: "pi pi-exclamation-triangle",
+    icon: "pi pi-trash",
+    acceptLabel: "ลบเครื่องจักร",
     acceptClass: "p-button-danger",
     accept: async () => {
       try {

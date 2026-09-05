@@ -114,7 +114,8 @@ function confirmDelete(formula) {
   confirm.require({
     message: `ต้องการลบสูตร "${formula.name}" ใช่หรือไม่?`,
     header: 'ยืนยันการลบ',
-    icon: 'pi pi-exclamation-triangle',
+    icon: 'pi pi-trash',
+    acceptLabel: 'ลบสูตร',
     acceptClass: 'p-button-danger',
     accept: async () => {
       try {

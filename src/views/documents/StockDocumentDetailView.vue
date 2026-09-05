@@ -14,6 +14,9 @@
         <RouterLink :to="`/documents/${kind}`">
           <Button label="ย้อนกลับ" icon="pi pi-arrow-left" outlined />
         </RouterLink>
+        <RouterLink v-if="doc?.status === 'DRAFT'" :to="`/documents/${kind}/${doc.id}/edit`">
+          <Button label="แก้ไข" icon="pi pi-pencil" outlined />
+        </RouterLink>
         <Button
           v-if="doc?.status === 'DRAFT'"
           label="ส่งอนุมัติ"
@@ -22,8 +25,13 @@
           :loading="docStore.saving"
           @click="changeStatus('IN_PROCESS')"
         />
+        <!--
+          A draft can be posted without passing through approval: the backend
+          only forbids moving a status backwards, so DRAFT → SUCCESS is a legal
+          jump and is what "create and post" already does.
+        -->
         <Button
-          v-if="doc?.status === 'IN_PROCESS'"
+          v-if="doc?.status === 'DRAFT' || doc?.status === 'IN_PROCESS'"
           :label="config.postLabel"
           icon="pi pi-check-circle"
           class="btn-primary"
@@ -278,7 +286,7 @@ function confirmPost() {
     icon: 'pi pi-exclamation-triangle',
     acceptLabel: `ยืนยัน ${config.value.effect}`,
     rejectLabel: 'ยกเลิก',
-    acceptClass: 'p-button-danger',
+    acceptClass: 'btn-primary',
     accept: () => changeStatus('SUCCESS'),
   })
 }
@@ -286,6 +294,7 @@ function confirmPost() {
 function confirmCancel() {
   confirm.require({
     header: 'ยกเลิกเอกสาร',
+    icon: 'pi pi-times-circle',
     message: `ต้องการยกเลิกเอกสาร ${doc.value.docNo} หรือไม่? เลขที่เอกสารนี้จะถูกปล่อยให้ใช้ซ้ำได้`,
     icon: 'pi pi-exclamation-triangle',
     acceptLabel: 'ยกเลิกเอกสาร',
@@ -435,7 +444,7 @@ watch(() => [route.params.id, route.meta.docKind], load)
   color: var(--gl-text-muted);
 }
 .mono {
-  font-family: monospace;
+  font-family: var(--gl-font-mono);
 }
 .lot-no {
   font-size: 12px;

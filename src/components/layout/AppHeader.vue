@@ -95,10 +95,19 @@ const roleLabel = computed(() => {
   return roles.map(r => ROLE_LABEL[r.code] || r.name).join(', ')
 })
 
+/**
+ * Page names by path. An entry also covers that page's children — a detail or
+ * create route carries an id the map cannot spell out — so the title is the
+ * longest entry the current path starts with, not an exact lookup.
+ */
 const pageTitle = computed(() => {
   const map = {
     "/dashboard": "แดชบอร์ด",
     "/master/products": "จัดการสินค้า / SKU",
+    "/master/products/create": "เพิ่มสินค้าใหม่",
+    "/master/packaging-sizes": "ขนาดบรรจุภัณฑ์",
+    "/master/brands": "ชื่อแบรนด์",
+    "/master/mixsizes": "ขนาดการผสม",
     "/master/categories": "ประเภทสินค้า",
     "/master/units": "หน่วยนับ",
     "/master/warehouses": "คลังสินค้า",
@@ -111,6 +120,8 @@ const pageTitle = computed(() => {
     "/documents/receipt/create": "สร้างใบรับเข้า (GR)",
     "/documents/requisition/create": "สร้างใบเบิก-จ่าย (RQ)",
     "/documents/return/create": "สร้างใบคืนสินค้า (RT)",
+    "/production/formulas": "สูตรการผลิต",
+    "/production/orders": "ใบสั่งผลิต",
     "/stock/by-warehouse": "สต๊อกแยกคลัง",
     "/stock/lots": "Lot Tracking (FIFO)",
     "/stock/hold": "Hold Management",
@@ -119,7 +130,10 @@ const pageTitle = computed(() => {
     "/stock/min-stock": "ตั้งค่า Min Stock",
     "/notifications": "ศูนย์การแจ้งเตือน",
   };
-  return map[route.path] || "Greenline WMS";
+  const match = Object.keys(map)
+    .filter((path) => route.path === path || route.path.startsWith(path + "/"))
+    .sort((a, b) => b.length - a.length)[0];
+  return match ? map[match] : "Greenline WMS";
 });
 
 function toggleUserMenu() {
@@ -345,7 +359,7 @@ const vClickOutside = {
   padding: 11px 16px;
   background: none;
   border: none;
-  font-family: "Kanit", sans-serif;
+  font-family: var(--gl-font);
   font-size: 13px;
   cursor: pointer;
   color: var(--gl-text);

@@ -81,11 +81,11 @@
           @click="resetFilters"
         />
 
-        <div class="toolbar-right">
-          <span class="total-badge" :title="'รวมทุกหน้า ไม่ใช่เฉพาะหน้านี้'">
-            รวมคงเหลือ: {{ formatQty(stockStore.summaryTotalQuantity) }}
-          </span>
-        </div>
+      </div>
+
+      <div class="summary-row">
+        <span class="summary-label">รวมคงเหลือทุกหน้า</span>
+        <span class="summary-value">{{ formatQty(stockStore.summaryTotalQuantity) }}</span>
       </div>
 
       <DataTable
@@ -333,7 +333,7 @@ onMounted(async () => {
   border: 1px solid var(--gl-border);
   background: var(--gl-surface);
   cursor: pointer;
-  font-family: 'Kanit', sans-serif;
+  font-family: var(--gl-font);
   font-size: 13px;
   color: var(--gl-text-muted);
   transition: all 0.15s;
@@ -383,21 +383,28 @@ onMounted(async () => {
   border-color: var(--gl-red);
 }
 
-.toolbar-right {
-  margin-left: auto;
+/* Its own row under the filters: in the toolbar it was the first thing to wrap
+   and ended up colliding with the table. */
+.summary-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 0 2px 12px;
 }
-.total-badge {
-  background: var(--gl-navy);
-  color: #fff;
-  padding: 6px 14px;
-  border-radius: 8px;
-  font-size: 13px;
+.summary-label {
+  font-size: 12px;
+  color: var(--gl-text-muted);
+}
+.summary-value {
+  font-size: 18px;
   font-weight: 600;
-  white-space: nowrap;
+  color: var(--gl-navy);
+  font-variant-numeric: tabular-nums;
 }
 
 .mono {
-  font-family: monospace;
+  font-family: var(--gl-font-mono);
   font-size: 12px;
   color: var(--gl-navy);
 }

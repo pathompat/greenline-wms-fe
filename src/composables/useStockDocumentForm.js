@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { computed, ref, unref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
 import { useConfirm } from 'primevue/useconfirm'
@@ -7,16 +7,18 @@ import { DOC_KINDS, useStockDocumentStore } from '@/stores/stockDocuments'
 /**
  * The save side of the three stock-document forms. They differ in what a line
  * looks like and what has to be true before it can be saved, so validation and
- * payload building stay in each view; everything after that — walking the
- * document to a status, confirming the irreversible step, reporting the outcome
- * — is identical and lives here.
+ * payload building stay in each view; everything after that — creating or
+ * updating, walking the document to a status, confirming the irreversible step,
+ * reporting the outcome — is identical and lives here.
  *
  * @param {'receipt'|'requisition'|'return'} kind
  * @param {object} hooks
  * @param {() => string|null} hooks.validate  message to show, or null when valid
  * @param {() => object} hooks.buildPayload   the create/update body
+ * @param {import('vue').Ref<number|null>} [hooks.documentId]
+ *   The draft being edited; absent or null means this is a new document.
  */
-export function useStockDocumentForm(kind, { validate, buildPayload }) {
+export function useStockDocumentForm(kind, { validate, buildPayload, documentId }) {
   const router = useRouter()
   const toast = useToast()
   const confirm = useConfirm()
@@ -24,11 +26,12 @@ export function useStockDocumentForm(kind, { validate, buildPayload }) {
   const config = DOC_KINDS[kind]
 
   const saving = ref(false)
+  const isEditing = computed(() => !!unref(documentId))
 
-  const SUCCESS_SUMMARY = {
+  const SAVE_SUMMARY = {
     DRAFT: 'บันทึกฉบับร่างแล้ว',
     IN_PROCESS: 'ส่งอนุมัติแล้ว',
-    SUCCESS: 'บันทึกและตัดสต๊อกแล้ว',
+    SUCCESS: `${config.effect}เรียบร้อยแล้ว`,
   }
 
   function warn(message) {
@@ -43,9 +46,22 @@ export function useStockDocumentForm(kind, { validate, buildPayload }) {
   }
 
   /**
-   * Creates the document and walks it to `targetStatus`.
-   * `SUCCESS` posts it to stock, which is why it asks first.
+   * Writes an existing draft back.
+   *
+   * The header and the lines are separate endpoints and both are `DRAFT`-only,
+   * so they have to land before any status change — hence the fixed order.
    */
+  async function updateDraft(id, targetStatus) {
+    const { items, ...header } = buildPayload()
+    await store.update(kind, id, header)
+    const saved = await store.replaceItems(kind, id, items)
+    if (targetStatus !== 'DRAFT') {
+      return store.update(kind, id, { status: targetStatus })
+    }
+    return saved
+  }
+
+  /** Saves the form and walks the document to `targetStatus`. */
   async function save(targetStatus) {
     const problem = validate()
     if (problem) {
@@ -55,14 +71,19 @@ export function useStockDocumentForm(kind, { validate, buildPayload }) {
 
     saving.value = true
     try {
-      const doc = await store.createAs(kind, buildPayload(), targetStatus)
+      const id = unref(documentId)
+      const doc = id
+        ? await updateDraft(id, targetStatus)
+        : await store.createAs(kind, buildPayload(), targetStatus)
       toast.add({
         severity: 'success',
-        summary: SUCCESS_SUMMARY[targetStatus],
+        summary: SAVE_SUMMARY[targetStatus],
         detail: `${config.label} ${doc.docNo}`,
         life: 4000,
       })
-      router.push(`/documents/${kind}`)
+      // Editing returns to the document just saved; creating goes to the list,
+      // where the new document is the one at the top.
+      router.push(id ? `/documents/${kind}/${id}` : `/documents/${kind}`)
       return doc
     } catch (error) {
       reportError(error, `บันทึก${config.label}ไม่สำเร็จ`)
@@ -96,10 +117,10 @@ export function useStockDocumentForm(kind, { validate, buildPayload }) {
       icon: 'pi pi-exclamation-triangle',
       acceptLabel: `ยืนยัน ${config.effect}`,
       rejectLabel: 'ยกเลิก',
-      acceptClass: 'p-button-danger',
+      acceptClass: 'btn-primary',
       accept: () => save('SUCCESS'),
     })
   }
 
-  return { saving, saveDraft, submit, confirmAndPost, reportError, warn }
+  return { saving, isEditing, saveDraft, submit, confirmAndPost, reportError, warn }
 }

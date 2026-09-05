@@ -2,17 +2,24 @@
   <div>
     <div class="page-header">
       <div>
-        <div class="page-title">สร้างใบรับเข้า (Goods Receipt)</div>
+        <div class="page-title">
+          {{ isEditing ? 'แก้ไขใบรับเข้า' : 'สร้างใบรับเข้า (Goods Receipt)' }}
+          <span v-if="isEditing && docNo" class="mono doc-no">{{ docNo }}</span>
+        </div>
         <div class="page-subtitle">
           บันทึกการรับสินค้าเข้าคลัง — เมื่อ "รับเข้าและเพิ่มสต๊อก" ระบบจะเพิ่มยอดคงเหลือทันที
         </div>
       </div>
-      <RouterLink to="/documents/receipt">
+      <RouterLink :to="backTo">
         <Button label="ย้อนกลับ" icon="pi pi-arrow-left" outlined />
       </RouterLink>
     </div>
 
-    <div class="page-card">
+    <div v-if="loadingDoc" class="page-card loading-card">
+      <i class="pi pi-spin pi-spinner" /> กำลังโหลดเอกสาร...
+    </div>
+
+    <div v-else class="page-card">
       <!-- ── Header ─────────────────────────────────────────── -->
       <div class="form-grid-3">
         <div>
@@ -184,7 +191,7 @@
 
       <!-- ── Actions ────────────────────────────────────────── -->
       <div class="form-actions">
-        <RouterLink to="/documents/receipt"><Button label="ยกเลิก" outlined /></RouterLink>
+        <RouterLink :to="backTo"><Button label="ยกเลิก" outlined /></RouterLink>
         <Button
           label="บันทึกร่าง"
           icon="pi pi-save"
@@ -207,7 +214,10 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { useToast } from 'primevue/usetoast'
 import { useMasterStore } from '@/stores/master'
+import { useStockDocumentStore, statusLabel } from '@/stores/stockDocuments'
 import { useStockDocumentForm } from '@/composables/useStockDocumentForm'
 import { toIsoDate } from '@/utils/date'
 import Button from 'primevue/button'
@@ -219,7 +229,20 @@ import Calendar from 'primevue/calendar'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
 
+const route = useRoute()
+const router = useRouter()
+const toast = useToast()
 const masterStore = useMasterStore()
+const docStore = useStockDocumentStore()
+
+// With an id in the route the page edits that draft; without one it creates.
+const documentId = computed(() => (route.params.id ? Number(route.params.id) : null))
+const docNo = ref('')
+const loadingDoc = ref(false)
+
+const backTo = computed(() =>
+  documentId.value ? `/documents/receipt/${documentId.value}` : '/documents/receipt',
+)
 
 const form = ref({
   warehouseId: null,
@@ -276,9 +299,9 @@ function validate() {
 function buildPayload() {
   return {
     warehouseId: form.value.warehouseId,
-    supplierId: form.value.supplierId ?? undefined,
+    supplierId: form.value.supplierId ?? null,
     docDate: toIsoDate(form.value.docDate),
-    remark: form.value.remark || undefined,
+    remark: form.value.remark || null,
     items: form.value.items.map((item) => ({
       productId: item.productId,
       quantity: item.quantity,
@@ -292,20 +315,75 @@ function buildPayload() {
   }
 }
 
-const { saving, saveDraft, submit, confirmAndPost } = useStockDocumentForm('receipt', {
-  validate,
-  buildPayload,
-})
+const { saving, isEditing, saveDraft, submit, confirmAndPost } = useStockDocumentForm(
+  'receipt',
+  { validate, buildPayload, documentId },
+)
+
+/**
+ * Fills the form from the draft named in the route. Only a `DRAFT` accepts
+ * edits — the backend rejects anything later — so a document that has moved on
+ * is sent back to its read-only detail page rather than shown in a form whose
+ * save would fail.
+ */
+async function loadDraft() {
+  if (!documentId.value) return
+  loadingDoc.value = true
+  try {
+    const doc = await docStore.fetchOne('receipt', documentId.value)
+    if (doc.status !== 'DRAFT') {
+      toast.add({
+        severity: 'warn',
+        summary: 'เอกสารนี้แก้ไขไม่ได้แล้ว',
+        detail: `สถานะปัจจุบันคือ "${statusLabel(doc.status)}"`,
+        life: 5000,
+      })
+      router.replace(`/documents/receipt/${documentId.value}`)
+      return
+    }
+    docNo.value = doc.docNo
+    form.value = {
+      warehouseId: doc.warehouseId,
+      supplierId: doc.supplierId ?? null,
+      docDate: new Date(doc.docDate),
+      remark: doc.remark || '',
+      items: (doc.items || []).map((item) => ({
+        productId: item.productId,
+        quantity: item.quantity,
+        unitCost: item.unitCost,
+        // The typed batch number, not the lot posting may have created.
+        lotNo: item.lotNo || '',
+        expiryDate: item.expiryDate ? new Date(item.expiryDate) : null,
+      })),
+    }
+  } catch (error) {
+    toast.add({
+      severity: 'error',
+      summary: 'โหลดเอกสารไม่สำเร็จ',
+      detail: error.response?.data?.message || error.message,
+      life: 5000,
+    })
+    router.replace('/documents/receipt')
+  } finally {
+    loadingDoc.value = false
+  }
+}
 
 onMounted(() => {
   if (!masterStore.warehouses.length) masterStore.fetchWarehouses()
   if (!masterStore.products.length) masterStore.fetchProducts()
   if (!masterStore.units.length) masterStore.fetchUnits()
   if (!masterStore.suppliers.length) masterStore.fetchSuppliers()
+  loadDraft()
 })
 </script>
 
 <style scoped>
+.doc-no {
+  font-size: 15px;
+  color: var(--gl-text-muted);
+  margin-left: 8px;
+}
 .divider {
   height: 1px;
   background: var(--gl-border);
@@ -347,7 +425,7 @@ onMounted(() => {
   flex: 1;
 }
 .opt-sku {
-  font-family: monospace;
+  font-family: var(--gl-font-mono);
   font-size: 11px;
   color: var(--gl-text-muted);
 }
@@ -367,7 +445,7 @@ onMounted(() => {
   color: var(--gl-text-muted);
 }
 .mono {
-  font-family: monospace;
+  font-family: var(--gl-font-mono);
 }
 .muted {
   color: var(--gl-text-muted);

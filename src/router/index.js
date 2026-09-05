@@ -44,6 +44,13 @@ const routes = [
       { path: 'documents/requisition/create', name: 'RequisitionCreate', component: () => import('@/views/documents/RequisitionView.vue') },
       { path: 'documents/return/create', name: 'ReturnCreate', component: () => import('@/views/documents/ReturnView.vue') },
 
+      // Editing a draft is the create form again, this time given a document to
+      // load. Declared before the detail routes so ':id/edit' is not read as a
+      // document whose id happens to be 'edit'.
+      { path: 'documents/receipt/:id/edit', name: 'ReceiptEdit', component: () => import('@/views/documents/GoodsReceiptView.vue') },
+      { path: 'documents/requisition/:id/edit', name: 'RequisitionEdit', component: () => import('@/views/documents/RequisitionView.vue') },
+      { path: 'documents/return/:id/edit', name: 'ReturnEdit', component: () => import('@/views/documents/ReturnView.vue') },
+
       // Detail pages, likewise sharing one component.
       { path: 'documents/receipt/:id', name: 'ReceiptDetail', component: () => import('@/views/documents/StockDocumentDetailView.vue'), meta: { docKind: 'receipt' } },
       { path: 'documents/requisition/:id', name: 'RequisitionDetail', component: () => import('@/views/documents/StockDocumentDetailView.vue'), meta: { docKind: 'requisition' } },

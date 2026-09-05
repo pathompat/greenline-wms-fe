@@ -181,7 +181,8 @@ function confirmDelete(item) {
   confirm.require({
     message: `ลบแบรนด์ "${item.name}" ใช่หรือไม่?`,
     header: 'ยืนยันการลบ',
-    icon: 'pi pi-exclamation-triangle',
+    icon: 'pi pi-trash',
+    acceptLabel: 'ลบแบรนด์',
     acceptClass: 'p-button-danger',
     accept: async () => {
       try {
